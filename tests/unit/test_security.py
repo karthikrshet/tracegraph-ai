@@ -34,6 +34,12 @@ def test_allowed_domains_normalize_operator_pasted_urls():
     assert s.allowed_document_hosts == ["raw.githubusercontent.com"]
 
 
+def test_custom_crawl_hosts_default_off_in_production():
+    assert Settings(app_env="production").custom_crawl_hosts_enabled is False
+    assert Settings(app_env="development").custom_crawl_hosts_enabled is True
+    assert Settings(app_env="production", allow_custom_crawl_hosts=True).custom_crawl_hosts_enabled is True
+
+
 def test_html_sanitization_removes_scripts_and_styles():
     """RequirementIngestor should strip scripts, styles, nav, and headers from untrusted HTML."""
     ingestor = RequirementIngestor(llm=MockLLMProvider())

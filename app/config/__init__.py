@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     crawler_max_depth: int = 3
     allowed_crawl_domains: str = ""
     allowed_document_domains: str = ""
+    # Development supports a user-selected public target after the same SSRF
+    # validation as configured targets. Production defaults to opt-out unless
+    # an authenticated operator explicitly enables it.
+    allow_custom_crawl_hosts: bool | None = None
 
     # ── Paths ────────────────────────────────
     data_dir: Path = Path(os.environ.get("DATA_DIR", "/tmp/data" if os.environ.get("VERCEL") else "./data"))
@@ -104,6 +108,13 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() in {"production", "staging"}
+
+    @property
+    def custom_crawl_hosts_enabled(self) -> bool:
+        """Whether an operator may approve one public target host per crawl."""
+        if self.allow_custom_crawl_hosts is not None:
+            return self.allow_custom_crawl_hosts
+        return not self.is_production
 
 
 # Singleton

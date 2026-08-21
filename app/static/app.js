@@ -106,15 +106,6 @@ function initCrawlControls() {
     });
   }
   // Presets
-  const presetCustom = document.getElementById("presetCustomUrl");
-
-  if (presetCustom) {
-    presetCustom.addEventListener("click", () => {
-      document.getElementById("inputCrawlUrl").value = "https://";
-      document.getElementById("inputCrawlUrl").focus();
-    });
-  }
-
   // Validate URL button
   const btnValidate = document.getElementById("btnValidateUrl");
   if (btnValidate) {
@@ -237,6 +228,10 @@ async function loadIngestedRequirements() {
   }
 }
 
+function customPublicHostEnabled() {
+  return document.getElementById("allowCustomPublicHost")?.checked ?? false;
+}
+
 async function validateUrl(url) {
   const msgEl = document.getElementById("urlValidationMsg");
   if (!url) {
@@ -249,7 +244,7 @@ async function validateUrl(url) {
     const res = await fetch("/api/crawl/validate-url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({ url, allow_custom_public_host: customPublicHostEnabled() }),
     });
     const data = await res.json();
     if (data.valid) {
@@ -308,6 +303,7 @@ async function startAutonomousCrawl() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url,
+        allow_custom_public_host: customPublicHostEnabled(),
         max_depth: maxDepth,
         max_actions: maxActions,
         max_states: maxStates,

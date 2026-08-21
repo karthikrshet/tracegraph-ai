@@ -232,16 +232,18 @@
                 <div class="form-group">
                   <label for="inputCrawlUrl">Target Storefront / Web App URL</label>
                   <div class="input-with-action">
-                    <input type="url" id="inputCrawlUrl" placeholder="Enter an allowlisted public application URL">
+                    <input type="url" id="inputCrawlUrl" placeholder="Enter a public application URL">
                     <button class="btn btn-secondary" id="btnValidateUrl">
                       <i data-lucide="shield-check" class="icon-sm"></i>
                       <span>Validate URL</span>
                     </button>
                   </div>
                   <div id="urlValidationMsg" class="url-validation-feedback"></div>
-                  <!-- Presets -->
                   <div class="quick-presets" style="margin-top: 6px;">
-                    <span class="preset-tag" id="presetCustomUrl">Custom Allowed URL</span>
+                    <label class="preset-tag" for="allowCustomPublicHost" title="The server still blocks private, loopback, metadata, and unsafe destinations.">
+                      <input type="checkbox" id="allowCustomPublicHost" checked>
+                      Custom public URL
+                    </label>
                   </div>
                 </div>
 

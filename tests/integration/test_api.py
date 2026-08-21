@@ -53,6 +53,32 @@ def test_health_endpoint(client):
     assert "target_pr" in data
 
 
+def test_custom_public_host_is_validated_and_scoped_per_request(client, monkeypatch):
+    """A custom target is allowed only after the normal validation gate passes."""
+    import app.api.main as main_mod
+    from app.config import Settings
+
+    monkeypatch.setattr(
+        main_mod,
+        "get_settings",
+        lambda: Settings(allowed_crawl_domains="", allow_custom_crawl_hosts=True),
+    )
+
+    def fake_validate(url, allowed_hosts):
+        if "academy.codemyfyp.com" in allowed_hosts:
+            return {"valid": True, "hostname": "academy.codemyfyp.com", "resolved_ips": ["203.0.113.8"]}
+        return {"valid": False, "reason": "Host is not configured", "resolved_ips": []}
+
+    monkeypatch.setattr(main_mod, "validate_crawl_url", fake_validate)
+    response = client.post(
+        "/api/crawl/validate-url",
+        json={"url": "https://academy.codemyfyp.com", "allow_custom_public_host": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["valid"] is True
+
+
 def test_flows_endpoint_fails_closed_without_graph(client):
     """GET /api/flows must not replace an unavailable graph with fixture flows."""
     response = client.get("/api/flows")

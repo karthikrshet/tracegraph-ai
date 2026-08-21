@@ -19,7 +19,7 @@ The prototype deliberately goes deep on provenance, safe collection, and determi
 
 ## Security model
 
-- Crawl and document URLs are server-side allowlisted and DNS-resolved; loopback, private, link-local, metadata, and redirect-to-private targets are rejected.
+- Crawl and document URLs are server-side allowlisted and DNS-resolved; loopback, private, link-local, metadata, and redirect-to-private targets are rejected. In development, the dashboard can explicitly approve the entered public hostname for that single crawl; it does not create a persistent or unrestricted allowlist entry. Production disables this option by default and requires authenticated API access before an operator enables `ALLOW_CUSTOM_CRAWL_HOSTS=true`.
 - Crawl budgets are server-enforced, navigation is same-domain, and destructive actions are filtered.
 - GitHub accepts only `owner/repository`, uses immutable PR head SHA for file retrieval, and fails closed on API errors.
 - Untrusted captured HTML is served as a downloadable text attachment with `nosniff`; it is never executed under the dashboard origin. Dashboard rendering escapes all crawl/report strings.

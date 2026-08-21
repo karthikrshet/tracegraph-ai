@@ -181,16 +181,53 @@ async def ingest_requirements(req: IngestRequest) -> dict[str, Any]:
 
 class ValidateUrlRequest(BaseModel):
     url: str
+    allow_custom_public_host: bool = True
+
+
+def validate_crawl_target(
+    url: str,
+    *,
+    configured_hosts: list[str],
+    allow_custom_public_host: bool,
+    custom_hosts_enabled: bool,
+) -> tuple[dict[str, Any], list[str]]:
+    """Validate a crawl URL and return the narrowly scoped navigation allowlist.
+
+    A configured host remains the normal production route. When explicitly
+    enabled, an operator can approve the hostname of *this* public target for
+    one crawl. The candidate still passes protocol, DNS, private-network, and
+    metadata-endpoint validation; this is never an unrestricted bypass.
+    """
+    configured = list(configured_hosts)
+    result = validate_crawl_url(url, allowed_hosts=configured)
+    if result["valid"] or not (allow_custom_public_host and custom_hosts_enabled):
+        return result, configured
+
+    parsed = urlparse(url.strip())
+    host = parsed.hostname
+    if not host:
+        return result, configured
+
+    scoped_hosts = [*configured, host.lower().rstrip(".")]
+    return validate_crawl_url(url, allowed_hosts=scoped_hosts), scoped_hosts
 
 
 @app.post("/api/crawl/validate-url", dependencies=[Depends(require_api_auth)])
 async def validate_url_endpoint(req: ValidateUrlRequest) -> dict[str, Any]:
     """Server-side URL security validation against SSRF, private IPs, and cloud metadata endpoints."""
-    return validate_crawl_url(req.url, allowed_hosts=get_settings().allowed_domains)
+    settings = get_settings()
+    result, _ = validate_crawl_target(
+        req.url,
+        configured_hosts=settings.allowed_domains,
+        allow_custom_public_host=req.allow_custom_public_host,
+        custom_hosts_enabled=settings.custom_crawl_hosts_enabled,
+    )
+    return result
 
 
 class CrawlStartRequest(BaseModel):
     url: str
+    allow_custom_public_host: bool = True
     max_depth: int = Field(default=3, ge=1, le=4)
     max_actions: int = Field(default=20, ge=1, le=25)
     max_states: int = Field(default=10, ge=1, le=10)
@@ -210,7 +247,12 @@ async def start_crawl(req: CrawlStartRequest) -> dict[str, Any]:
     settings = get_settings()
     url = req.url
 
-    val = validate_crawl_url(url, allowed_hosts=settings.allowed_domains)
+    val, crawl_allowlist = validate_crawl_target(
+        url,
+        configured_hosts=settings.allowed_domains,
+        allow_custom_public_host=req.allow_custom_public_host,
+        custom_hosts_enabled=settings.custom_crawl_hosts_enabled,
+    )
     if not val["valid"]:
         raise HTTPException(status_code=400, detail=val["reason"])
 
@@ -225,7 +267,7 @@ async def start_crawl(req: CrawlStartRequest) -> dict[str, Any]:
         capture_dom=req.capture_dom,
         autonomous=req.autonomous,
         headless=req.headless,
-        allowed_domains=settings.allowed_domains,
+        allowed_domains=crawl_allowlist,
     )
 
     manager = CrawlSessionManager.get_instance(settings.data_dir)
