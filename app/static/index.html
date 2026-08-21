@@ -39,7 +39,7 @@
       <div class="navbar-right">
         <div class="status-indicator">
           <span class="pulse-dot"></span>
-          <span id="backendStatus">Live Engine Online</span>
+          <span id="backendStatus">Checking evidence engine…</span>
         </div>
         <button id="btnRunPipeline" class="btn btn-primary">
           <i data-lucide="refresh-cw"></i>
@@ -94,7 +94,7 @@
               <i data-lucide="file-code-2"></i>
             </div>
             <div class="metric-data">
-              <span class="metric-num" id="statFiles">13</span>
+              <span class="metric-num" id="statFiles">—</span>
               <span class="metric-label">Changed Files</span>
             </div>
           </div>
@@ -172,7 +172,7 @@
             <span>QA Test Recommendation</span>
           </div>
           <div id="qaRecContent" class="rec-body">
-            Run a provenance-verified PR analysis to generate a recommendation.
+            Build a graph from one completed crawl, specification, and PR before generating a recommendation.
           </div>
         </div>
       </aside>
@@ -553,10 +553,10 @@
                   <i data-lucide="sparkles" class="icon-sm text-cyan"></i>
                   <span>Live AI Executive Blast Radius Summary</span>
                 </div>
-                <span class="badge badge-partial" id="llmEngineBadge">Live LLM Active</span>
+                <span class="badge badge-unverified" id="llmEngineBadge">EVIDENCE REQUIRED</span>
               </div>
               <div id="llmExecutiveSummary" style="padding: 16px; font-size: 0.88rem; line-height: 1.65; color: var(--text-primary); white-space: pre-line;">
-                Analyzing PR blast radius...
+                No provenance-verified report is loaded. Complete the crawl, specification ingestion, and graph build steps for the selected repository and PR.
               </div>
             </div>
 

@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initPRControls();
   loadInitialData();
   loadIngestedRequirements();
+  setAnalysisUnavailable("No provenance-verified report has been loaded.");
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -697,21 +698,36 @@ function initPRControls() {
       }
       btnReindex.disabled = true;
       btnReindex.innerHTML = "<i data-lucide='refresh-cw'></i> <span>Indexing...</span>";
-      await fetch("/api/build-graph", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pr_number: pr, repo: repo, crawl_id: currentCrawlId }),
-      });
-      await runPRAnalysis(repo, pr);
-      btnReindex.disabled = false;
-      btnReindex.innerHTML = "<i data-lucide='refresh-cw'></i> <span>Re-Index Graph</span>";
-      lucide.createIcons();
+      try {
+        const response = await fetch("/api/build-graph", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pr_number: pr, repo: repo, crawl_id: currentCrawlId }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Graph build failed.");
+        await runPRAnalysis(repo, pr);
+      } catch (err) {
+        console.error("Graph build failed", err);
+        setAnalysisUnavailable(err.message);
+      } finally {
+        btnReindex.disabled = false;
+        btnReindex.innerHTML = "<i data-lucide='refresh-cw'></i> <span>Re-Index Graph</span>";
+        lucide.createIcons();
+      }
     });
   }
 }
 
 async function loadInitialData() {
-  // Historical sessions are not selected as evidence for a new run.
+  const backendStatus = document.getElementById("backendStatus");
+  try {
+    const response = await fetch("/api/health");
+    if (!response.ok) throw new Error("Health check failed");
+    backendStatus.innerText = "API reachable • evidence required";
+  } catch (_) {
+    backendStatus.innerText = "API unavailable";
+  }
 }
 
 async function runPRAnalysis(repo, prNumber, force = true) {
@@ -721,18 +737,18 @@ async function runPRAnalysis(repo, prNumber, force = true) {
   try {
     const reportRes = await fetch(`/api/report/${prNumber}?repo=${encodeURIComponent(repo)}${force ? "&force=true" : ""}`);
     const report = await reportRes.json();
+    if (!reportRes.ok) throw new Error(report.detail || "A provenance-verified report is unavailable.");
     currentReport = report;
 
     // Update PR Header Details
     document.getElementById("prTitleDisplay").innerText = report.pr_title || `PR #${prNumber}`;
-    document.getElementById("prRiskBadge").innerText = report.overall_risk === "HIGH" ? "HIGH RISK" : "MEDIUM RISK";
-    document.getElementById("prRiskBadge").className = `badge ${report.overall_risk === "HIGH" ? "badge-risk-high" : "badge-warning"}`;
+    const risk = report.overall_risk || "UNASSESSED";
+    document.getElementById("prRiskBadge").innerText = `${risk} RISK`;
+    document.getElementById("prRiskBadge").className = `badge ${risk === "HIGH" ? "badge-risk-high" : risk === "MEDIUM" ? "badge-warning" : "badge-unverified"}`;
 
     // Update Top Counters
-    const changedFilesCount = Array.isArray(report.changed_files) ? report.changed_files.length : (report.metrics?.changed_files ?? 4);
-    const astSymbolsCount = (report.metrics && report.metrics.symbols_count !== undefined) 
-      ? report.metrics.symbols_count 
-      : (Array.isArray(report.changed_files) ? (report.changed_files.length * 4 + 9) : 25);
+    const changedFilesCount = Array.isArray(report.changed_files) ? report.changed_files.length : (report.metrics?.changed_files ?? "—");
+    const astSymbolsCount = report.metrics?.symbols_count ?? "—";
 
     document.getElementById("statFiles").innerText = changedFilesCount;
     document.getElementById("statSymbols").innerText = astSymbolsCount;
@@ -745,7 +761,33 @@ async function runPRAnalysis(repo, prNumber, force = true) {
     await loadRequirementsMatrix();
   } catch (err) {
     console.error("PR Analysis failed", err);
+    setAnalysisUnavailable(err.message);
   }
+}
+
+function setTableMessage(selector, columnCount, message) {
+  const tbody = document.querySelector(selector);
+  if (tbody) tbody.innerHTML = `<tr><td colspan="${columnCount}" class="text-muted">${escapeHtml(message)}</td></tr>`;
+}
+
+function setAnalysisUnavailable(reason) {
+  currentReport = null;
+  document.getElementById("prTitleDisplay").innerText = "Evidence graph not ready";
+  document.getElementById("prRiskBadge").innerText = "UNASSESSED";
+  document.getElementById("prRiskBadge").className = "badge badge-unverified";
+  document.getElementById("statFiles").innerText = "—";
+  document.getElementById("statSymbols").innerText = "—";
+  document.getElementById("statUI").innerText = "—";
+  document.getElementById("statReqs").innerText = "—";
+  document.getElementById("llmEngineBadge").innerText = "EVIDENCE REQUIRED";
+  document.getElementById("llmEngineBadge").className = "badge badge-unverified";
+  document.getElementById("llmExecutiveSummary").innerText = `No blast-radius claim was generated. ${reason} Build the graph from the selected PR, a completed crawl, and ingested requirements.`;
+  document.getElementById("qaRecContent").innerText = "Crawl the application, ingest its product specification, then build the Neo4j graph before reviewing blast radius.";
+  setTableMessage("#tableImpactedUI tbody", 5, "No report available — no UI impact claim has been made.");
+  setTableMessage("#tableImpactedFlows tbody", 4, "No report available — no affected-flow claim has been made.");
+  setTableMessage("#tableImpactedReqs tbody", 5, "No report available — no requirement-risk claim has been made.");
+  const evidence = document.getElementById("evidenceCardsList");
+  if (evidence) evidence.innerHTML = `<p class="text-muted">${escapeHtml(reason)}</p>`;
 }
 
 function formatMarkdownToHtml(text) {
@@ -763,8 +805,10 @@ function renderBlastRadiusReport(report) {
   // Populate Live AI Executive Summary
   const summaryEl = document.getElementById("llmExecutiveSummary");
   if (summaryEl) {
-    summaryEl.innerHTML = formatMarkdownToHtml(report.summary || "No provenance-verified report is available yet.");
+    summaryEl.innerHTML = formatMarkdownToHtml(report.summary || "The graph traversal found no impact paths for this PR.");
   }
+  document.getElementById("llmEngineBadge").innerText = "GRAPH VERIFIED";
+  document.getElementById("llmEngineBadge").className = "badge badge-success";
 
   // Populate QA Test Recommendation
   const recEl = document.getElementById("qaRecContent");
@@ -789,6 +833,7 @@ function renderBlastRadiusReport(report) {
     `;
     uiTbody.appendChild(row);
   });
+  if (!uiTbody.children.length) setTableMessage("#tableImpactedUI tbody", 5, "No UI impact paths were found in the verified graph traversal.");
 
   // Populate Flows table
   const flowTbody = document.querySelector("#tableImpactedFlows tbody");
@@ -803,6 +848,7 @@ function renderBlastRadiusReport(report) {
     `;
     flowTbody.appendChild(row);
   });
+  if (!flowTbody.children.length) setTableMessage("#tableImpactedFlows tbody", 4, "No affected flow paths were found in the verified graph traversal.");
 
   // Populate Reqs table
   const reqTbody = document.querySelector("#tableImpactedReqs tbody");
@@ -821,6 +867,7 @@ function renderBlastRadiusReport(report) {
     `;
     reqTbody.appendChild(row);
   });
+  if (!reqTbody.children.length) setTableMessage("#tableImpactedReqs tbody", 5, "No requirement impact paths were found in the verified graph traversal.");
 }
 
 function renderEvidenceChains(report) {
@@ -891,7 +938,7 @@ function renderDynamicCoverageMatrix(requirements) {
       <td><code>${escapeHtml(r.id)}</code></td>
       <td>${escapeHtml(r.category)}</td>
       <td>${escapeHtml(r.text)}</td>
-      <td><code>${(r.testability_score || 0.9).toFixed(2)}</code></td>
+      <td><code>${Number.isFinite(Number(r.testability_score)) ? Number(r.testability_score).toFixed(2) : "—"}</code></td>
       <td><span class="badge ${badgeClass}">${status}</span></td>
       <td><small>${evidenceDesc}</small></td>
     `;
@@ -909,6 +956,7 @@ async function loadKnowledgeGraph(repo, prNumber) {
   try {
     const res = await fetch(`/api/graph/visualize?repo=${encodeURIComponent(repo)}&pr_number=${prNumber}`);
     const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Evidence graph is unavailable.");
 
     const graphData = {
       nodes: new vis.DataSet(data.nodes || []),
