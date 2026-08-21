@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Product Catalog - Local Commerce</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background: #f8fafc; color: #0f172a; }
+    .product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-top: 1.5rem; }
+    .card { background: white; padding: 1.5rem; border-radius: 8px; border: 1px solid #cbd5e1; }
+    a { color: #2563eb; text-decoration: none; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="index.html">← Back to Home</a>
+    <h1>Product Catalog</h1>
+  </header>
+  <div class="product-grid">
+    <div class="card" data-testid="product-card-1">
+      <h3>Fresh Organic Juice</h3>
+      <p>Delicious 100% cold pressed juice with custom flavors.</p>
+      <a href="product_detail.html" data-testid="link-view-juice">View Product Details</a>
+    </div>
+    <div class="card" data-testid="product-card-2">
+      <h3>Cotton T-Shirt</h3>
+      <p>Premium unisex shirt with color and size attribute variants.</p>
+      <a href="product_detail.html" data-testid="link-view-shirt">View Product Details</a>
+    </div>
+  </div>
+</body>
+</html>

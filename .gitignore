@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Environment — NEVER commit secrets
+.env
+.env.*
+!.env.example
+
+# Data artifacts (too large for git)
+data/
+*.jsonl
+*.json.bak
+
+# Neo4j
+neo4j_data/
+neo4j_logs/
+
+# Playwright
+.playwright/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Screenshots from crawler
+*.png
+*.webp
+data/artifacts/

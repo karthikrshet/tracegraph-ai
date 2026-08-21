@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TraceGraph AI — Autonomous Web Crawler, Knowledge Graph & PR Blast Radius</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Vis Network for Interactive Knowledge Graph -->
+  <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Navbar -->
+    <header class="navbar">
+      <div class="navbar-left">
+        <div class="brand">
+          <div class="brand-icon">
+            <i data-lucide="git-merge"></i>
+          </div>
+          <span class="brand-title">TraceGraph <span class="accent">AI</span></span>
+          <span class="badge badge-subtle">v0.1.0</span>
+        </div>
+      </div>
+
+      <div class="navbar-center">
+        <div class="active-target-pill">
+          <i data-lucide="git-pull-request" class="icon-sm text-cyan"></i>
+          <span class="pill-repo" id="headerRepo">No repository selected</span>
+          <span class="pill-divider">/</span>
+          <span class="pill-pr" id="headerPR">No PR selected</span>
+        </div>
+      </div>
+
+      <div class="navbar-right">
+        <div class="status-indicator">
+          <span class="pulse-dot"></span>
+          <span id="backendStatus">Live Engine Online</span>
+        </div>
+        <button id="btnRunPipeline" class="btn btn-primary">
+          <i data-lucide="refresh-cw"></i>
+          <span>Re-Index Graph</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Grid -->
+    <main class="main-body">
+      <!-- Left Sidebar Controls -->
+      <aside class="sidebar">
+        <!-- Target Selection Card -->
+        <div class="card">
+          <div class="card-title">
+            <i data-lucide="settings-2" class="icon-sm"></i>
+            <span>Target Repository & PR</span>
+          </div>
+          
+          <div class="form-group">
+            <label for="inputRepo">GitHub Repository</label>
+            <div class="input-wrap">
+              <input type="text" id="inputRepo" placeholder="owner/repository">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="inputPRNumber">Pull Request Number</label>
+            <div class="input-with-action">
+              <input type="number" id="inputPRNumber" min="1">
+              <button id="btnFetchPR" class="btn btn-action">
+                <i data-lucide="search" class="icon-sm"></i>
+                <span>Analyze</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- PR Details Card -->
+          <div class="pr-preview-box" id="prSummaryBox">
+            <div class="pr-title" id="prTitleDisplay">Select a repository and pull request to begin</div>
+            <div class="pr-footer">
+              <span class="badge badge-unverified" id="prRiskBadge">UNANALYZED</span>
+              <span class="pr-author" id="prAuthorDisplay">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metrics 2x2 Grid -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-icon code-color">
+              <i data-lucide="file-code-2"></i>
+            </div>
+            <div class="metric-data">
+              <span class="metric-num" id="statFiles">13</span>
+              <span class="metric-label">Changed Files</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-icon symbol-color">
+              <i data-lucide="code"></i>
+            </div>
+            <div class="metric-data">
+              <span class="metric-num" id="statSymbols">0</span>
+              <span class="metric-label">AST Symbols</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-icon ui-color">
+              <i data-lucide="layout"></i>
+            </div>
+            <div class="metric-data">
+              <span class="metric-num" id="statUI">0</span>
+              <span class="metric-label">Impacted UI</span>
+            </div>
+          </div>
+
+          <div class="metric-card">
+            <div class="metric-icon req-color">
+              <i data-lucide="shield-alert"></i>
+            </div>
+            <div class="metric-data">
+              <span class="metric-num" id="statReqs">0</span>
+              <span class="metric-label">Reqs At Risk</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer Filters -->
+        <div class="card">
+          <div class="card-title">
+            <i data-lucide="layers" class="icon-sm"></i>
+            <span>Graph Layers</span>
+          </div>
+          <div class="layer-list">
+            <label class="layer-item">
+              <input type="checkbox" id="toggleLayerPR" checked>
+              <span class="chk pr-chk"></span>
+              <span class="layer-name">Pull Request Changes</span>
+            </label>
+            <label class="layer-item">
+              <input type="checkbox" id="toggleLayerCode" checked>
+              <span class="chk code-chk"></span>
+              <span class="layer-name">Code Symbols & Files</span>
+            </label>
+            <label class="layer-item">
+              <input type="checkbox" id="toggleLayerUI" checked>
+              <span class="chk ui-chk"></span>
+              <span class="layer-name">UI Elements & Selectors</span>
+            </label>
+            <label class="layer-item">
+              <input type="checkbox" id="toggleLayerFlows" checked>
+              <span class="chk flow-chk"></span>
+              <span class="layer-name">User Journeys & Flows</span>
+            </label>
+            <label class="layer-item">
+              <input type="checkbox" id="toggleLayerReqs" checked>
+              <span class="chk req-chk"></span>
+              <span class="layer-name">Product Requirements</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- QA Recommendation Card -->
+        <div class="card rec-card">
+          <div class="card-title text-amber">
+            <i data-lucide="lightbulb" class="icon-sm"></i>
+            <span>QA Test Recommendation</span>
+          </div>
+          <div id="qaRecContent" class="rec-body">
+            Run a provenance-verified PR analysis to generate a recommendation.
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center & Right Workspace -->
+      <section class="workspace">
+        <!-- Unified Clean Navigation Tab Strip -->
+        <div class="tab-strip">
+          <button class="tab-item active" data-tab="crawlView">
+            <i data-lucide="compass"></i>
+            <span>Web Crawler</span>
+          </button>
+          <button class="tab-item" data-tab="ingestView">
+            <i data-lucide="file-text"></i>
+            <span>Specification</span>
+          </button>
+          <button class="tab-item" data-tab="graphView">
+            <i data-lucide="network"></i>
+            <span>3-Layer Graph</span>
+          </button>
+          <button class="tab-item" data-tab="blastRadiusView">
+            <i data-lucide="crosshair"></i>
+            <span>Blast Radius</span>
+          </button>
+          <button class="tab-item" data-tab="evidenceView">
+            <i data-lucide="route"></i>
+            <span>Evidence Chains</span>
+          </button>
+          <button class="tab-item" data-tab="coverageView">
+            <i data-lucide="table-2"></i>
+            <span>4-State Matrix</span>
+          </button>
+          <button class="tab-item" data-tab="sessionsView">
+            <i data-lucide="folder-archive"></i>
+            <span>Crawl Sessions</span>
+          </button>
+        </div>
+
+        <!-- Tab 0: Crawl Application Control Center -->
+        <div class="tab-panel active" id="crawlView">
+          <div class="report-content">
+            <div class="panel-header">
+              <div>
+                <h2>Autonomous Crawler & Exploration Center</h2>
+                <p class="panel-subtitle">Agentic browser exploration: observes live screens, extracts interactive candidate actions, computes state fingerprints, and builds concrete transitions.</p>
+              </div>
+            </div>
+
+            <!-- Crawl Config Grid -->
+            <div class="crawl-config-grid">
+              <div class="card crawl-settings-card">
+                <div class="card-title">
+                  <i data-lucide="globe" class="icon-sm text-cyan"></i>
+                  <span>Target Application & Parameters</span>
+                </div>
+
+                <div class="form-group">
+                  <label for="inputCrawlUrl">Target Storefront / Web App URL</label>
+                  <div class="input-with-action">
+                    <input type="url" id="inputCrawlUrl" placeholder="Enter an allowlisted public application URL">
+                    <button class="btn btn-secondary" id="btnValidateUrl">
+                      <i data-lucide="shield-check" class="icon-sm"></i>
+                      <span>Validate URL</span>
+                    </button>
+                  </div>
+                  <div id="urlValidationMsg" class="url-validation-feedback"></div>
+                  <!-- Presets -->
+                  <div class="quick-presets" style="margin-top: 6px;">
+                    <span class="preset-tag" id="presetCustomUrl">Custom Allowed URL</span>
+                  </div>
+                </div>
+
+                <div class="config-sliders-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
+                  <div class="form-group">
+                    <label for="crawlMaxDepth">Max Depth: <span id="valMaxDepth" class="text-cyan">3</span></label>
+                    <input type="range" id="crawlMaxDepth" min="1" max="4" value="3" class="slider">
+                  </div>
+                  <div class="form-group">
+                    <label for="crawlMaxActions">Max Actions: <span id="valMaxActions" class="text-cyan">20</span></label>
+                    <input type="range" id="crawlMaxActions" min="1" max="25" value="20" class="slider">
+                  </div>
+                </div>
+
+                <div class="config-toggles-grid" style="display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px;">
+                  <label class="toggle-item">
+                    <input type="checkbox" id="crawlCaptureScreenshots" checked>
+                    <span>Capture Screenshots</span>
+                  </label>
+                  <label class="toggle-item">
+                    <input type="checkbox" id="crawlCaptureDom" checked>
+                    <span>Capture DOM</span>
+                  </label>
+                  <label class="toggle-item">
+                    <input type="checkbox" id="crawlAutonomous" checked>
+                    <span>Autonomous Exploration</span>
+                  </label>
+                </div>
+
+                <div class="crawl-action-bar" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px;">
+                  <button class="btn btn-primary" id="btnStartCrawl">
+                    <i data-lucide="play"></i>
+                    <span>Run Live Crawl</span>
+                  </button>
+                  <button class="btn btn-danger hidden" id="btnCancelCrawl">
+                    <i data-lucide="square"></i>
+                    <span>Cancel</span>
+                  </button>
+                </div>
+                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">
+                  <span>Live crawl only. The system records browser-observed artifacts and does not substitute fixture data.</span>
+                </div>
+              </div>
+
+              <!-- Live Observability Panel -->
+              <div class="card crawl-monitor-card" id="crawlMonitorCard">
+                <div class="monitor-header">
+                  <div class="monitor-status">
+                    <span class="status-dot" id="crawlStatusDot"></span>
+                    <strong id="crawlStatusText">IDLE / READY</strong>
+                  </div>
+                  <div class="monitor-timer">
+                    <i data-lucide="clock" class="icon-sm"></i>
+                    <span id="crawlTimer">00:00</span>
+                  </div>
+                </div>
+
+                <div class="monitor-stats-grid">
+                  <div class="mstat-box">
+                    <span class="mstat-num" id="liveStatPages">0</span>
+                    <span class="mstat-label">Pages</span>
+                  </div>
+                  <div class="mstat-box">
+                    <span class="mstat-num" id="liveStatStates">0</span>
+                    <span class="mstat-label">States</span>
+                  </div>
+                  <div class="mstat-box">
+                    <span class="mstat-num" id="liveStatActions">0</span>
+                    <span class="mstat-label">Actions</span>
+                  </div>
+                  <div class="mstat-box">
+                    <span class="mstat-num" id="liveStatTransitions">0</span>
+                    <span class="mstat-label">Transitions</span>
+                  </div>
+                </div>
+
+                <div class="current-activity-box">
+                  <div class="activity-row">
+                    <span class="act-tag">CURRENT SCREEN:</span>
+                    <strong id="liveCurrentScreen">—</strong>
+                  </div>
+                  <div class="activity-row">
+                    <span class="act-tag">CURRENT ACTION:</span>
+                    <span id="liveCurrentAction" class="text-cyan">—</span>
+                  </div>
+                </div>
+
+                <div class="terminal-feed-header">
+                  <i data-lucide="terminal" class="icon-sm"></i>
+                  <span>Live Crawler Event Stream</span>
+                </div>
+                <div class="terminal-feed" id="crawlEventFeed">
+                  <div class="term-line text-muted">Ready to initiate autonomous exploration session...</div>
+                </div>
+
+                <!-- Post-Crawl Completion Toolbar -->
+                <div class="post-crawl-toolbar" id="crawlPostToolbar" style="margin-top: 10px;">
+                  <button class="btn btn-secondary btn-sm" id="btnViewScreens">
+                    <i data-lucide="image"></i>
+                    <span>Discovered Screens</span>
+                  </button>
+                  <button class="btn btn-secondary btn-sm" id="btnViewTransitions">
+                    <i data-lucide="git-commit"></i>
+                    <span>Transitions</span>
+                  </button>
+                  <button class="btn btn-primary btn-sm" id="btnApplyCrawlToGraph">
+                    <i data-lucide="database"></i>
+                    <span>Apply to Graph</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Discovered Screens & Transitions Viewer Container (Always Visible) -->
+            <div class="discovered-artifacts-section" id="discoveredArtifactsSection" style="margin-top: 18px;">
+              <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i data-lucide="layout" class="icon-sm text-cyan"></i>
+                  <span id="artifactsSectionTitle">Discovered Screen Artifacts & Screenshots</span>
+                </div>
+                <span class="badge badge-unverified" id="crawlSessionBadge">No crawl selected</span>
+              </div>
+              <div class="screens-gallery-grid" id="screensGallery"></div>
+              <div class="transitions-table-wrap hidden" id="transitionsWrap">
+                <table class="styled-table" id="tableDiscoveredTransitions">
+                  <thead>
+                    <tr>
+                      <th>Transition ID</th>
+                      <th>From Screen</th>
+                      <th>Trigger Action</th>
+                      <th>To Screen</th>
+                      <th>Interaction Type</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 0.2: Ingest Specification (Step 2) -->
+        <div class="tab-panel" id="ingestView">
+          <div class="report-content">
+            <div class="panel-header">
+              <div>
+                <h2>② Ingest Product Specification & PRD</h2>
+                <p class="panel-subtitle">Parse public PRD, README, feature documentation, or JSON specs into structured, testable Requirements with testability scoring.</p>
+              </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 20px;">
+              <div class="card-title">
+                <i data-lucide="file-input" class="icon-sm text-cyan"></i>
+                <span>Specification Source</span>
+              </div>
+              <div class="spec-ingest-grid">
+                <div>
+                  <div class="form-group">
+                    <label for="inputSpecUrl">Documentation / PRD URL</label>
+                    <input type="url" id="inputSpecUrl" placeholder="https://docs.saleor.io/developer/products" value="https://docs.saleor.io/developer/products">
+                  </div>
+                  <div class="form-group">
+                    <label>Or Paste Markdown / PRD Text</label>
+                    <textarea id="specTextInput" class="spec-textarea" placeholder="# Product Requirements&#10;REQ-001: Users can browse product listings and view details..."></textarea>
+                  </div>
+                  <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button class="btn btn-primary" id="btnIngestSpec">
+                      <i data-lucide="sparkles"></i>
+                      <span>Ingest & Extract Requirements</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="form-group">
+                    <label>Ingestion Summary & Source Provenance</label>
+                    <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); padding: 14px; border-radius: var(--radius-sm); font-size: 0.84rem; line-height: 1.6;">
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span>Requirements Extracted:</span>
+                        <strong id="ingestCountDisplay" class="text-cyan">Not ingested</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span>Provenance Mode:</span>
+                        <span class="badge badge-unverified" id="specSourceBadge">Awaiting public source</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span>Categories:</span>
+                        <span id="specCategoriesDisplay" style="color: var(--text-secondary);">—</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between;">
+                        <span>Average Testability Score:</span>
+                        <strong id="ingestScoreDisplay" class="text-emerald">—</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Ingested Requirements List -->
+            <div class="section-box">
+              <div class="section-title">
+                <i data-lucide="shield-check" class="icon-sm text-emerald"></i>
+                <span>Structured Requirements Table</span>
+              </div>
+              <table class="styled-table" id="tableIngestedReqs">
+                <thead>
+                  <tr>
+                    <th>Req ID</th>
+                    <th>Category</th>
+                    <th>Requirement Text</th>
+                    <th>Testability</th>
+                    <th>Coverage Status</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 0.5: Crawl Sessions History -->
+        <div class="tab-panel" id="sessionsView">
+          <div class="report-content">
+            <div class="panel-header">
+              <div>
+                <h2>Past Autonomous Crawl Sessions</h2>
+                <p class="panel-subtitle">Audited record of all browser explorations, states captured, and screen graphs.</p>
+              </div>
+              <button class="btn btn-secondary" id="btnRefreshSessions">
+                <i data-lucide="refresh-cw"></i>
+                <span>Refresh Sessions</span>
+              </button>
+            </div>
+
+            <table class="styled-table" id="tableCrawlSessions">
+              <thead>
+                <tr>
+                  <th>Crawl ID</th>
+                  <th>Target URL</th>
+                  <th>Status</th>
+                  <th>Discovered Pages</th>
+                  <th>Transitions</th>
+                  <th>Started At</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 1: Interactive Network Canvas -->
+        <div class="tab-panel" id="graphView">
+          <div class="canvas-wrapper">
+            <div class="canvas-bar">
+              <div class="canvas-actions">
+                <button class="btn btn-tool" id="btnZoomIn">
+                  <i data-lucide="zoom-in"></i>
+                  <span>Zoom In</span>
+                </button>
+                <button class="btn btn-tool" id="btnZoomOut">
+                  <i data-lucide="zoom-out"></i>
+                  <span>Zoom Out</span>
+                </button>
+                <button class="btn btn-tool" id="btnFitGraph">
+                  <i data-lucide="maximize-2"></i>
+                  <span>Fit Screen</span>
+                </button>
+                <button class="btn btn-tool" id="btnResetPhysics">
+                  <i data-lucide="refresh-cw"></i>
+                  <span>Stabilize</span>
+                </button>
+              </div>
+              <div class="canvas-legend">
+                <span class="legend-tag"><span class="color-dot bg-pr"></span> PR</span>
+                <span class="legend-tag"><span class="color-dot bg-code"></span> Code Symbol</span>
+                <span class="legend-tag"><span class="color-dot bg-ui"></span> UI Element</span>
+                <span class="legend-tag"><span class="color-dot bg-page"></span> Page</span>
+                <span class="legend-tag"><span class="color-dot bg-flow"></span> Flow</span>
+                <span class="legend-tag"><span class="color-dot bg-req"></span> Requirement</span>
+              </div>
+            </div>
+            <div id="networkGraph" class="vis-canvas"></div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Blast Radius View -->
+        <div class="tab-panel" id="blastRadiusView">
+          <div class="report-content">
+            <div class="panel-header">
+              <div>
+                <h2>Deterministic PR Impact Breakdown</h2>
+                <p class="panel-subtitle">Derived from graph traversal paths with hop-weight confidence arithmetic.</p>
+              </div>
+              <button class="btn btn-secondary" id="btnDownloadMd">
+                <i data-lucide="download"></i>
+                <span>Export Markdown</span>
+              </button>
+            </div>
+
+            <!-- Live AI Executive Summary -->
+            <div class="section-box" style="margin-bottom: 20px; border-left: 4px solid var(--color-cyan);">
+              <div class="section-title" style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <i data-lucide="sparkles" class="icon-sm text-cyan"></i>
+                  <span>Live AI Executive Blast Radius Summary</span>
+                </div>
+                <span class="badge badge-partial" id="llmEngineBadge">Live LLM Active</span>
+              </div>
+              <div id="llmExecutiveSummary" style="padding: 16px; font-size: 0.88rem; line-height: 1.65; color: var(--text-primary); white-space: pre-line;">
+                Analyzing PR blast radius...
+              </div>
+            </div>
+
+            <!-- UI Table -->
+            <div class="section-box">
+              <div class="section-title">
+                <i data-lucide="alert-triangle" class="icon-sm text-rose"></i>
+                <span>Impacted UI Components</span>
+              </div>
+              <table class="styled-table" id="tableImpactedUI">
+                <thead>
+                  <tr>
+                    <th>Element Label</th>
+                    <th>Type</th>
+                    <th>Risk Tier</th>
+                    <th>Confidence</th>
+                    <th>Evidence Path</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <!-- Flow Table -->
+            <div class="section-box">
+              <div class="section-title">
+                <i data-lucide="shuffle" class="icon-sm text-amber"></i>
+                <span>Affected User Flows</span>
+              </div>
+              <table class="styled-table" id="tableImpactedFlows">
+                <thead>
+                  <tr>
+                    <th>Flow ID</th>
+                    <th>Flow Name</th>
+                    <th>Risk Tier</th>
+                    <th>Confidence</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <!-- Reqs Table -->
+            <div class="section-box">
+              <div class="section-title">
+                <i data-lucide="clipboard-list" class="icon-sm text-emerald"></i>
+                <span>Requirements at Risk</span>
+              </div>
+              <table class="styled-table" id="tableImpactedReqs">
+                <thead>
+                  <tr>
+                    <th>Req ID</th>
+                    <th>Requirement Text</th>
+                    <th>Category</th>
+                    <th>Confidence</th>
+                    <th>Coverage Status</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Evidence Provenance View -->
+        <div class="tab-panel" id="evidenceView">
+          <div class="report-content">
+            <div class="panel-header">
+              <div>
+                <h2>Mathematical Evidence Paths (No Hallucinations)</h2>
+                <p class="panel-subtitle">Every single risk claim is proven via concrete graph hops from PR diff → Code AST → UI selector → User journey.</p>
+              </div>
+            </div>
+            <div class="evidence-list" id="evidenceCardsList"></div>
+          </div>
+        </div>
+
+        <!-- Tab 4: 4-State Coverage Matrix View -->
+        <div class="tab-panel" id="coverageView">
+          <div class="report-content">
+            <div class="panel-header">
+              <div>
+                <h2>4-State Requirement Coverage Matrix</h2>
+                <p class="panel-subtitle">Models what should exist versus what is observed in the UI (including explicit absence modeling).</p>
+              </div>
+              <div class="coverage-badges">
+                <span class="badge badge-covered" id="cntCovered">COVERED: 0</span>
+                <span class="badge badge-partial" id="cntPartial">PARTIAL: 0</span>
+                <span class="badge badge-unverified" id="cntUnverified">UNVERIFIED: 0</span>
+                <span class="badge badge-absent" id="cntAbsent">ABSENT: 0</span>
+              </div>
+            </div>
+
+            <table class="styled-table" id="tableReqMatrix">
+              <thead>
+                <tr>
+                  <th>Req ID</th>
+                  <th>Category</th>
+                  <th>Requirement Description</th>
+                  <th>Testability</th>
+                  <th>Coverage Status</th>
+                  <th>UI Evidence</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <script>
+    // Initialize Lucide icons
+    document.addEventListener("DOMContentLoaded", () => {
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>

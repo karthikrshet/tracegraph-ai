@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Shopping Cart - Local Commerce</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; background: #f8fafc; color: #0f172a; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #cbd5e1; padding: 0.75rem; text-align: left; }
+    button { background: #16a34a; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; font-weight: bold; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="products.html">← Continue Shopping</a>
+    <h1>Shopping Cart</h1>
+  </header>
+  <table>
+    <thead><tr><th>Item</th><th>Qty</th><th>Price</th></tr></thead>
+    <tbody>
+      <tr><td>Organic Apple Juice (Crisp Green)</td><td>2</td><td>$9.98</td></tr>
+    </tbody>
+  </table>
+  <div style="margin-top: 1.5rem;">
+    <button id="btnCheckout" data-testid="checkout-button" onclick="location.href='checkout.html'">Proceed to Checkout</button>
+  </div>
+</body>
+</html>
