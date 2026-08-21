@@ -37,22 +37,20 @@ And the system's response is not an LLM opinion — it's a graph path.
 
 ### 2.3 Selected PR
 
-**PR #6857** — *"Give each attribute dropdown its own option cache so lists stay put"*  
-- Merged: 2026-08-21 at 10:55 UTC  
-- SHA: `d2c50bcac30ff2173d25f7f1d30ff9e194bdcbcb`  
-- Files changed: 13 TypeScript/React files  
-- Symbols modified: `DropdownRow`, `SwatchRow`, `Attributes`, `useAttributeDropdown`, `resolveByAttributeId`, and 7 more  
-- URL: `https://github.com/saleor/saleor-dashboard/pull/6857`
+**PR #350** — *"Secure auth flows and harden validation across the UI"*  
+- Repository: `realworld-apps/angular-realworld-example-app`  
+- SHA: `fc4380310755babb0d8c2021420d5b3e860b890c`  
+- Files changed: 7 TypeScript files  
+- Source symbols observed: `AuthComponent`, `IfAuthenticatedDirective`, `JwtService`, `ArticleComponent`, `SettingsComponent`  
+- URL: `https://github.com/realworld-apps/angular-realworld-example-app/pull/350`
 
-**Why this PR?** It modifies shared attribute dropdown infrastructure used across Product Create, Product Update, Product Variant Create, and CMS Page pages. The blast radius is wide and traceable — ideal for demonstrating the full graph traversal chain.
+**Why this PR?** It changes authentication-related UI code in the same Angular Conduit application crawled by the browser. It demonstrates one bounded, auditable path without claiming exhaustive product coverage.
 
-### 2.4 User Flows (3 frozen flows)
+### 2.4 Observed User Flow
 
-| ID | Name | Pages | Key Requirements |
-|----|------|-------|-----------------|
-| FLOW-01 | Product Browse → Product Detail → Add to Cart | Listing → Detail → Cart | REQ-001 through REQ-011 |
-| FLOW-02 | Cart → Checkout → Address | Cart → Checkout → Address | REQ-005, REQ-006 |
-| FLOW-03 | Checkout Payment → Order Confirmation | Shipping → Payment → Confirmation | REQ-007, REQ-008 |
+| ID | Name | Pages | Linked requirement |
+|----|------|-------|--------------------|
+| observed-crawl-350 | Public authentication navigation | `/` → `/login` → `/register` | REQ-001 |
 
 ---
 
@@ -86,10 +84,10 @@ Stage 7: Non-Engineer Blast Report      → LLM (narrates already-determined gra
 The boundary between Stage 5 (deterministic graph traversal) and Stage 7 (LLM explanation) is the core architectural decision.
 
 **If an LLM determined impact**, you'd get:
-> "This PR might affect checkout because the AI thinks attributes relate to cart."
+> "This PR might affect authentication because the AI thinks the file name sounds relevant."
 
 **Because graph traversal determines impact**, you get:
-> "PR #6857 → `DropdownRow.tsx` → `DropdownRow` (confidence 0.95) → `UI-001` → `PAGE-02` → `FLOW-01` → `REQ-003` (path confidence 0.727)"
+> "PR #350 → `auth.component.ts` → `AuthComponent` (file-scope mapping) → Sign up on `/` → observed-crawl-350 → `REQ-001` (path confidence 0.45)"
 
 Every single impact claim is an auditable, reproducible graph path.
 
@@ -306,12 +304,12 @@ The system recommends human review when:
 
 ## 6. Evaluation Approach
 
-### 6.1 Golden Dataset
+### 6.1 Reviewed dataset
 
-14 hand-verified (Requirement → UIElement) pairs and 8 (Requirement → UserFlow) pairs, constructed from:
-- Manual inspection of demo.saleor.io
-- Reading the PR diff carefully
-- Cross-referencing Saleor documentation
+The checked-in submission does not claim a generalizable F1 score. The
+evaluation command accepts an independently reviewed ground-truth file for the
+exact selected run and computes precision, recall, and F1 from that file. The
+PR #350 sample is evidence-backed but is not a held-out benchmark.
 
 ### 6.2 Metrics
 
@@ -349,7 +347,7 @@ Given a pinned PR head SHA, persisted crawl artifacts, persisted extracted requi
 |------|----------|--------|
 | Unconstrained open-ended web agent | ❌ Bounded exploration with safety validator | Safety first: strict max depth (4), max pages (10), SSRF blocker, blocked destructive verbs |
 | Interprocedural call graph | ❌ AST symbol extraction + regex parser | Full TypeScript compiler/LSP runtime adds significant cold-start overhead |
-| Authenticated dashboard crawl | ❌ Not implemented | No storefront proxy or fixture data is used as a substitute |
+| Authenticated crawling | ❌ Not implemented | The run is limited to public, non-destructive routes |
 | Arbitrary embedding models | ❌ Deterministic name overlap + exact matches | Provides 100% reproducible baseline; eliminates LLM hallucination in evidence path |
 | Offline graph engine | ❌ Not implemented | The system fails closed rather than presenting an unproven report |
 
@@ -358,17 +356,21 @@ Given a pinned PR head SHA, persisted crawl artifacts, persisted extracted requi
 - Evidence provenance on every edge
 - 4-state coverage model
 - Honest limitation documentation
-- 43 passing unit tests
+- 65 passing tests
 
 ---
 
 ## 8. What We'd Build Next (Prioritized)
 
-### Priority 1: Full JSX import-chain tracing
-**Value:** Currently `DropdownRow` is identified as a component, but we don't trace that `ProductCreatePage` imports `Attributes` which renders `DropdownRow`. Implementing this via TypeScript LSP or ts-morph would increase blast radius precision by ~30%.
+### Priority 1: TypeScript import-chain tracing
+**Value:** Resolve changes through Angular templates, imports, and component
+trees. This would replace the PR #350 file-scope fallback with exact symbol
+evidence and materially improve precision.
 
-### Priority 2: Authenticated merchant dashboard crawl  
-**Value:** The actual attribute UI lives behind login at `admin.saleor.io`. Crawling it would let us directly observe the `DropdownRow` behavior rather than inferring it from the storefront proxy. This would upgrade REQ-009, REQ-010, REQ-013 from PARTIAL to COVERED.
+### Priority 2: Authenticated, isolated browser sessions  
+**Value:** Extend coverage to settings, article author controls, and logout
+without storing credentials in crawl artifacts or triggering destructive flow
+actions.
 
 ### Priority 3: Embedding-based Req→UI matching with calibrated threshold
 **Value:** Replace keyword overlap with `text-embedding-3-small` cosine similarity. Add calibration step on golden dataset to find the precision/recall-optimal threshold. Expected improvement: recall +15%, precision -3% (acceptable trade-off).
@@ -415,68 +417,40 @@ Given a pinned PR head SHA, persisted crawl artifacts, persisted extracted requi
 
 ### Code → UI Mapping (The Hardest Problem)
 
-The hardest problem in this architecture is: how do you know `DropdownRow.tsx` renders the "Product Attribute Dropdown" element?
+The hardest problem in this architecture is: how do you know a changed source
+symbol renders a browser-observed UI element?
 
 Our approach (in order of confidence):
-1. **Exact name match** (confidence ~0.94): component name `DropdownRow` → label "Product Attribute Dropdown" — overlap "dropdown" + "attribute" = 2/4 words
-2. **data-test-id match** (confidence ~0.90): if element has `data-test-id="variantPicker"` and there's a component named `VariantPicker`
-3. **File path match** (confidence ~0.70): element on `Product Detail` page, file in `src/products/components/`
+1. **Exact name match** (highest confidence): component and UI label share a distinctive normalized token.
+2. **data-test-id match** (high confidence): a DOM test ID matches a component or symbol name.
+3. **File-path semantic match** (lower confidence): the source path carries a bounded domain term, such as `auth`, and the observed UI label carries an auth term such as Sign in or Sign up.
 4. **No LLM fallback:** weak matches remain unmapped and are surfaced for review
 
-In production, step 1 is replaced by a TypeScript LSP import-chain traversal.
+The verified sample run uses the third method for `AuthComponent`; its report
+therefore downgrades the path confidence and calls out the file-scope mapping.
+In production, the first three heuristics should be replaced by a TypeScript
+LSP import-chain traversal.
 
-### Graph Complexity (as of current implementation)
+### Verified narrow-slice run
 
-| Metric | Value |
-|--------|-------|
-| Requirement nodes | 14 |
-| UIElement nodes | 17 |
-| Page nodes | 8 |
-| UserFlow nodes | 3 |
-| CodeFile nodes | ~27 |
-| CodeSymbol nodes | ~25 |
-| PullRequest nodes | 1 |
-| PRChange nodes | ~27 |
-| COVERS edges | ~30 |
-| IMPLEMENTED_BY edges | ~12 |
-| Total edges | ~150 |
+The tracked sample output is [evidence_run_pr_350.md](evidence_run_pr_350.md).
+It uses the RealWorld Angular Conduit application and the matching public
+repository, `realworld-apps/angular-realworld-example-app`, PR #350 at
+immutable head `fc4380310755babb0d8c2021420d5b3e860b890c`.
 
-Small enough to be fast; large enough to demonstrate the traversal.
+| Metric | Verified value |
+|--------|---------------:|
+| Requirements | 3 |
+| Browser-observed pages | 3 |
+| DOM snapshots / screenshots | 3 / 3 |
+| UI elements / transitions | 27 / 5 |
+| Code files / symbols | 7 / 5 |
+| PR changes / flows | 7 / 1 |
+| Requirement paths in report | 1 |
+| Unverified requirements | 2 |
 
----
-
-## Appendix A: Requirements Catalog
-
-| ID | Text | Category | Testability |
-|----|------|----------|-------------|
-| REQ-001 | Browse product listings, view name/description/price/images | product | 0.95 |
-| REQ-002 | Products have attributes (color, size) with dropdown values | product_attributes | 0.92 |
-| REQ-003 | Attribute dropdowns show values and allow search/filter | product_attributes | 0.94 |
-| REQ-004 | Add products to cart from product detail page | cart | 0.98 |
-| REQ-005 | View and manage items in shopping cart | cart | 0.97 |
-| REQ-006 | Cart to checkout with shipping address | checkout | 0.96 |
-| REQ-007 | Select shipping method during checkout | checkout | 0.93 |
-| REQ-008 | Enter payment, complete order | checkout | 0.95 |
-| REQ-009 | Product variants have independent attribute selections | product_attributes | 0.90 |
-| REQ-010 | Attribute selections preserved when navigating fields | product_attributes | 0.88 |
-| REQ-011 | Create new attribute values via "Add new value" | product_attributes | 0.85 |
-| REQ-012 | Swatch attributes show color previews | product_attributes | 0.87 |
-| REQ-013 | Product create/update pages support attribute assignment | product | 0.93 |
-| REQ-014 | CMS Page models support attribute assignment | content | 0.80 |
-
----
-
-## Appendix B: PR #6857 Analysis Summary
-
-**What changed:**  
-The PR replaces a single shared `attributeValues` array (passed from parent to all dropdowns) with a per-attribute lookup function `(attributeId: string) => AttributeValueFragment[]`. This means each dropdown maintains its own option list independently.
-
-**Why it matters:**  
-The bug: when user A opens the Color dropdown, the shared array gets populated with Color values. User then opens the Size dropdown — the shared array is overwritten with Size values, emptying the Color dropdown's options.
-
-**Impact scope:**  
-All pages that render `<Attributes />` with multiple attribute fields:
-- `ProductCreatePage` → `ProductUpdatePage` → `ProductVariantCreatePage` → `PageDetailsPage`
-
-**Critical requirement at risk:**  
-REQ-010: *"Attribute dropdown selections must be preserved when navigating between form fields"* — This is exactly the bug being fixed. QA must verify the fix doesn't introduce regressions elsewhere.
+The generated report is LOW confidence, intentionally: the one demonstrated
+path traverses an existing `AuthComponent` changed at file scope to
+browser-observed Sign in/Sign up elements via a documented semantic matcher.
+This is sufficient to demonstrate the causal system while preserving the
+human-review boundary for the remaining unmapped changed files.
