@@ -19,6 +19,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from app.graph import GraphBuilder
 from app.llm import LLMProvider, get_llm_provider
@@ -50,6 +51,7 @@ def compute_path_confidence(
     is_component: bool = True,
     req_testability: float = 0.90,
     change_type: str = "modified",
+    code_mapping_method: str = "declaration_in_diff",
 ) -> float:
     """
     Compute mathematically calibrated end-to-end confidence as product of hop weights.
@@ -62,6 +64,8 @@ def compute_path_confidence(
         elif hop == "file_to_symbol":
             # Components have higher architectural weight than general utilities
             weight = 0.96 if is_component else 0.88
+            if code_mapping_method == "file_scope_fallback":
+                weight = 0.65
             if change_type in ("added", "deleted"):
                 weight = min(0.98, weight + 0.02)
         elif hop == "symbol_to_ui":
@@ -212,6 +216,7 @@ class PRAnalyzer:
                 ui_label=str(row.get("ui_element_label", "")),
                 is_component=bool(row.get("is_component", True)),
                 change_type=str(row.get("change_type", "modified")),
+                code_mapping_method=str(row.get("code_mapping_method", "declaration_in_diff")),
             )
             evidence_chain = [
                 f"PR #{row.get('pr_number', '?')}",
@@ -222,7 +227,7 @@ class PRAnalyzer:
             seen[ui_id] = ImpactedItem(
                 item_type="UIElement",
                 item_id=ui_id,
-                label=str(row.get("ui_element_label", ui_id)),
+                label=self._ui_label_with_route(row, ui_id),
                 risk_level=_risk_level(confidence),
                 confidence=confidence,
                 confidence_tier=ConfidenceTier.from_score(confidence),
@@ -249,6 +254,7 @@ class PRAnalyzer:
                 ui_label=str(row.get("ui_element_label", "")),
                 is_component=bool(row.get("is_component", True)),
                 change_type=str(row.get("change_type", "modified")),
+                code_mapping_method=str(row.get("code_mapping_method", "declaration_in_diff")),
             )
             evidence_chain = [
                 str(row.get("file_path", "?")),
@@ -291,6 +297,7 @@ class PRAnalyzer:
                 is_component=bool(row.get("is_component", True)),
                 req_testability=testability,
                 change_type=str(row.get("change_type", "modified")),
+                code_mapping_method=str(row.get("code_mapping_method", "declaration_in_diff")),
             )
             evidence_chain = [
                 str(row.get("file_path", "?")),
@@ -318,6 +325,14 @@ class PRAnalyzer:
                 ],
             )
         return list(seen.values())
+
+    @staticmethod
+    def _ui_label_with_route(row: dict[str, Any], fallback: str) -> str:
+        """Disambiguate repeated UI text with the browser-observed URL route."""
+        label = str(row.get("ui_element_label") or fallback)
+        page_url = str(row.get("page_url") or "")
+        route = urlparse(page_url).path or "/"
+        return f"{label} ({route})"
 
     async def _generate_report_text(
         self,
@@ -425,8 +440,8 @@ class PRAnalyzer:
         return (
             f"### PR #{pr_number} Analysis: {pr_title}\n\n"
             f"**1. Code Modifications & Blast Radius:**\n"
-            f"This pull request modifies {len(changed_files)} file(s) ({files_str}) impacting **{len(ui)} UI component(s)** ({ui_list}). "
-            f"Through deterministic AST-to-DOM dependency analysis, these code changes propagate directly into user interface interactions.\n\n"
+            f"This pull request modifies {len(changed_files)} file(s) ({files_str}). "
+            f"TraceGraph found **{len(ui)} browser-observed UI link(s)** ({ui_list}) through deterministic, provenance-recorded mappings.\n\n"
             f"**2. Impacted User Flows & Business Requirements:**\n"
             f"The changes affect {len(flows)} key user journey(s): {flow_names}. "
             f"Key product requirements at risk include: {req_list}. "

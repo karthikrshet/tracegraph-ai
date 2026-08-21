@@ -17,11 +17,23 @@ from app.api.main import app
 @pytest.fixture
 def client(monkeypatch):
     import app.api.main as main_mod
+    from app.graph import GraphUnavailableError
     from app.ingestor import RequirementIngestor
     from app.llm import MockLLMProvider
     from app.models import Requirement
 
     monkeypatch.setattr(main_mod, "get_llm_provider", lambda *args, **kwargs: MockLLMProvider())
+
+    class UnavailableGraph:
+        def cypher_query(self, *_args, **_kwargs):
+            raise GraphUnavailableError("Test graph intentionally unavailable")
+
+        def close(self):
+            return None
+
+    # Integration API tests assert fail-closed behavior without depending on
+    # whether a developer happens to have Neo4j running locally.
+    monkeypatch.setattr(main_mod, "get_graph", lambda: UnavailableGraph())
 
     async def fake_ingest(self, source_urls, source_text=""):
         assert source_urls == ["https://docs.saleor.io/developer/products"]

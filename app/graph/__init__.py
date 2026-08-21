@@ -354,7 +354,8 @@ class GraphBuilder:
                         path_words = set(re.findall(r"[a-z0-9]+", sym.file_path.lower()))
                         if "auth" in path_words:
                             path_words.update({"login", "signin", "signup", "register", "authentication"})
-                        if label_words & path_words:
+                        normalized_path_words = {word.replace(" ", "") for word in path_words}
+                        if label_words & path_words or any(word in label_normalized for word in normalized_path_words):
                             score = 0.55
                             method = "file_path_semantic_match"
 
@@ -416,11 +417,15 @@ class GraphBuilder:
                 req_words = set(req.text.lower().split())
                 cat_kws = set(CATEGORY_KEYWORDS.get(req.category, []))
                 req_kws = req_words | cat_kws
+                req_normalized = re.sub(r"[^a-z0-9]", "", req.text.lower())
 
                 for elem in elements:
                     elem_words = set(elem.label.lower().split())
                     # Score = overlap
                     overlap = len(req_kws & elem_words) / max(len(req_kws), 1)
+                    elem_normalized = re.sub(r"[^a-z0-9]", "", elem.label.lower())
+                    if any(term in req_normalized and term in elem_normalized for term in ("login", "signin", "signup", "register")):
+                        overlap = max(overlap, 0.3)
 
                     if overlap >= 0.1:
                         confidence = min(overlap * 2.0, 0.95)
@@ -507,8 +512,8 @@ class GraphBuilder:
                 cypher = """
                 MATCH (pr:PullRequest {number: $pr_number})<-[:PART_OF_PR]-(change:PRChange)
                 OPTIONAL MATCH (change)-[:TOUCHES]->(file:CodeFile)
-                OPTIONAL MATCH (change)-[:MODIFIES]->(sym:CodeSymbol)
-                OPTIONAL MATCH (ui:UIElement)-[:IMPLEMENTED_BY]->(sym)
+                OPTIONAL MATCH (change)-[modifies:MODIFIES]->(sym:CodeSymbol)
+                OPTIONAL MATCH (ui:UIElement)-[implementation:IMPLEMENTED_BY]->(sym)
                 OPTIONAL MATCH (ui)-[:PART_OF]->(page:Page)
                 OPTIONAL MATCH (page)-[:STEP_IN]->(flow:UserFlow)
                 OPTIONAL MATCH (flow)-[:REQUIRES]->(req:Requirement)
@@ -518,13 +523,16 @@ class GraphBuilder:
                     pr.number AS pr_number,
                     change.change_type AS change_type,
                     change.changed_symbols AS changed_symbols,
+                    modifies.mapping_method AS code_mapping_method,
                     sym.name AS symbol_name,
                     sym.fqn AS symbol_fqn,
                     sym.is_component AS is_component,
                     ui.id AS ui_element_id,
                     ui.label AS ui_element_label,
+                    implementation.method AS ui_mapping_method,
                     page.id AS page_id,
                     page.title AS page_title,
+                    page.url AS page_url,
                     flow.id AS flow_id,
                     flow.name AS flow_name,
                     req.id AS req_id,

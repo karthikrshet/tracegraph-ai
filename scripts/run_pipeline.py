@@ -30,12 +30,27 @@ def main(
     pr: int = typer.Option(..., min=1, help="Pull request number"),
     crawl_url: str = typer.Option(..., help="Allowed public application URL to crawl"),
     spec_url: str = typer.Option(..., help="Allowed public PRD or feature-document URL"),
+    reuse_verified_code: bool = typer.Option(
+        False,
+        help="Reuse explicitly persisted immutable GitHub evidence when the API is rate-limited.",
+    ),
+    reuse_crawl_id: str = typer.Option(
+        "",
+        help="Reuse one completed, URL-matching browser crawl session by ID.",
+    ),
 ) -> None:
     """Ingest a real specification, crawl a real UI, and analyze a real PR."""
-    asyncio.run(_run(repo, pr, crawl_url, spec_url))
+    asyncio.run(_run(repo, pr, crawl_url, spec_url, reuse_verified_code, reuse_crawl_id))
 
 
-async def _run(repo: str, pr_number: int, crawl_url: str, spec_url: str) -> None:
+async def _run(
+    repo: str,
+    pr_number: int,
+    crawl_url: str,
+    spec_url: str,
+    reuse_verified_code: bool,
+    reuse_crawl_id: str,
+) -> None:
     from app.code_analyzer import CodeAnalyzer
     from app.config import get_settings
     from app.crawler import AutonomousCrawlerAgent
@@ -62,37 +77,49 @@ async def _run(repo: str, pr_number: int, crawl_url: str, spec_url: str) -> None
     requirements = await RequirementIngestor(llm=llm, data_dir=data_dir).run(source_urls=[spec_url])
 
     console.print("[bold]2/5 Crawling the selected live application[/bold]")
-    crawl_id = f"cli_pr_{pr_number}"
-    crawler = AutonomousCrawlerAgent(
-        base_url=crawl_url,
-        data_dir=data_dir,
-        session_id=crawl_id,
-        allowed_domains=settings.allowed_domains,
-    )
-    # A narrow, bounded slice is intentional for a take-home run: it captures
-    # independent screen states and transitions without broad or repeated clicks.
-    pages, elements, transitions, screen_graph = await crawler.explore(max_pages=5, max_actions=5)
-    if not pages or not elements:
-        raise RuntimeError("Crawl returned no observable pages or UI elements; graph build aborted.")
-    crawl_dir = data_dir / "artifacts" / "crawls" / crawl_id
-    crawl_session = CrawlSession(
-        id=crawl_id,
-        start_url=crawl_url,
-        status="COMPLETED",
-        completed_at=datetime.utcnow(),
-        configuration=CrawlConfiguration(start_url=crawl_url, allowed_domains=settings.allowed_domains),
-        pages_discovered=len(pages),
-        elements_discovered=len(elements),
-        actions_executed=len(transitions),
-        transitions_discovered=len(transitions),
-        states_discovered=len(pages),
-        pages=pages,
-        elements=elements,
-        transitions=transitions,
-        screen_graph=screen_graph,
-        artifacts_dir=str(crawl_dir),
-    )
-    (crawl_dir / "session.json").write_text(crawl_session.model_dump_json(indent=2), encoding="utf-8")
+    if reuse_crawl_id:
+        from app.crawler.session_manager import CrawlSessionManager
+
+        prior = CrawlSessionManager(data_dir).get_session(reuse_crawl_id)
+        if not prior or prior.status != "COMPLETED" or prior.start_url != crawl_url:
+            raise RuntimeError("reuse_crawl_id must reference a completed crawl of the exact crawl_url.")
+        if not prior.pages or not prior.elements:
+            raise RuntimeError("reuse_crawl_id has no browser-observed pages and elements.")
+        crawl_id = prior.id
+        pages, elements, transitions, screen_graph = prior.pages, prior.elements, prior.transitions, prior.screen_graph
+        console.print(f"Reusing completed browser crawl {crawl_id} with {len(pages)} pages.")
+    else:
+        crawl_id = f"cli_pr_{pr_number}"
+        crawler = AutonomousCrawlerAgent(
+            base_url=crawl_url,
+            data_dir=data_dir,
+            session_id=crawl_id,
+            allowed_domains=settings.allowed_domains,
+        )
+        # A narrow, bounded slice is intentional for a take-home run: it captures
+        # independent screen states and transitions without broad or repeated clicks.
+        pages, elements, transitions, screen_graph = await crawler.explore(max_pages=5, max_actions=5)
+        if not pages or not elements:
+            raise RuntimeError("Crawl returned no observable pages or UI elements; graph build aborted.")
+        crawl_dir = data_dir / "artifacts" / "crawls" / crawl_id
+        crawl_session = CrawlSession(
+            id=crawl_id,
+            start_url=crawl_url,
+            status="COMPLETED",
+            completed_at=datetime.utcnow(),
+            configuration=CrawlConfiguration(start_url=crawl_url, allowed_domains=settings.allowed_domains),
+            pages_discovered=len(pages),
+            elements_discovered=len(elements),
+            actions_executed=len(transitions),
+            transitions_discovered=len(transitions),
+            states_discovered=len(pages),
+            pages=pages,
+            elements=elements,
+            transitions=transitions,
+            screen_graph=screen_graph,
+            artifacts_dir=str(crawl_dir),
+        )
+        (crawl_dir / "session.json").write_text(crawl_session.model_dump_json(indent=2), encoding="utf-8")
 
     host = urlparse(crawl_url).hostname or "application"
     flow = UserFlow(
@@ -106,7 +133,15 @@ async def _run(repo: str, pr_number: int, crawl_url: str, spec_url: str) -> None
         page.step_order = step_order
 
     console.print("[bold]3/5 Fetching the real pull request and changed source files[/bold]")
-    code_data = await CodeAnalyzer(github_token=settings.github_token, data_dir=data_dir).run(repo, pr_number)
+    analyzer = CodeAnalyzer(github_token=settings.github_token, data_dir=data_dir)
+    if reuse_verified_code:
+        code_data = analyzer.load_from_disk(data_dir, repo=repo, pr_number=pr_number)
+        pr_meta = code_data.get("pr")
+        if not pr_meta or pr_meta.number != pr_number or not pr_meta.head_sha:
+            raise RuntimeError("No immutable, verified GitHub evidence is available for the requested PR.")
+        console.print(f"Reusing verified GitHub evidence at immutable head {pr_meta.head_sha[:12]}.")
+    else:
+        code_data = await analyzer.run(repo, pr_number)
     if not code_data["code_files"]:
         raise RuntimeError("No source files could be extracted from the PR; report generation aborted.")
 
