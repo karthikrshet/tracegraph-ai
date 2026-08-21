@@ -207,6 +207,14 @@ async function loadIngestedRequirements() {
         tbody.innerHTML = "<tr><td colspan='5' class='text-muted'>No real specification has been ingested yet.</td></tr>";
         return;
       }
+      const categories = [...new Set(reqs.map(r => r.category).filter(Boolean))].sort();
+      const averageScore = reqs.reduce((total, r) => total + (Number(r.testability_score) || 0), 0) / reqs.length;
+      const sourceKinds = new Set(reqs.map(r => r.source_url === "inline://operator-submitted" ? "Pasted specification" : "Public URL"));
+      document.getElementById("ingestCountDisplay").innerText = `${reqs.length} requirements`;
+      document.getElementById("specCategoriesDisplay").innerText = categories.join(", ") || "—";
+      document.getElementById("ingestScoreDisplay").innerText = `${averageScore.toFixed(2)} / 1.0`;
+      document.getElementById("specSourceBadge").innerText = [...sourceKinds].join(" + ");
+      document.getElementById("specSourceBadge").className = "badge badge-success";
       reqs.forEach(r => {
         const row = document.createElement("tr");
         const statusBadge = r.coverage_status === "COVERED" 
