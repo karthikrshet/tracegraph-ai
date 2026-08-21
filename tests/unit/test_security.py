@@ -23,6 +23,17 @@ def test_allowed_crawl_domains_whitelist():
     assert "malicious-site.com" not in s.allowed_domains
 
 
+def test_allowed_domains_normalize_operator_pasted_urls():
+    """An allowlist entry may be supplied as a full URL without weakening scope."""
+    s = Settings(
+        allowed_crawl_domains="https://academy.codemyfyp.com, docs.example.com",
+        allowed_document_domains="https://raw.githubusercontent.com/docs",
+    )
+
+    assert s.allowed_domains == ["academy.codemyfyp.com", "docs.example.com"]
+    assert s.allowed_document_hosts == ["raw.githubusercontent.com"]
+
+
 def test_html_sanitization_removes_scripts_and_styles():
     """RequirementIngestor should strip scripts, styles, nav, and headers from untrusted HTML."""
     ingestor = RequirementIngestor(llm=MockLLMProvider())

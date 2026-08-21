@@ -9,8 +9,40 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _parse_allowed_hosts(value: str) -> list[str]:
+    """Return normalized hostnames from a comma-separated allowlist.
+
+    Operators naturally paste either ``example.com`` or
+    ``https://example.com`` into the dashboard configuration.  The security
+    boundary operates on hostnames, so normalize both forms here rather than
+    silently creating a non-matching allowlist entry.  Invalid entries are
+    deliberately ignored; they must not widen the allowlist.
+    """
+    hosts: list[str] = []
+    for raw_entry in value.split(","):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+
+        parsed = urlparse(entry)
+        if parsed.scheme:
+            if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+                continue
+            host = parsed.hostname
+        elif all(character not in entry for character in "/?#@"):
+            host = entry
+        else:
+            continue
+
+        normalized = host.rstrip(".").lower()
+        if normalized and normalized not in hosts:
+            hosts.append(normalized)
+    return hosts
 
 
 class Settings(BaseSettings):
@@ -59,11 +91,11 @@ class Settings(BaseSettings):
 
     @property
     def allowed_domains(self) -> list[str]:
-        return [d.strip().lower() for d in self.allowed_crawl_domains.split(",") if d.strip()]
+        return _parse_allowed_hosts(self.allowed_crawl_domains)
 
     @property
     def allowed_document_hosts(self) -> list[str]:
-        return [d.strip().lower() for d in self.allowed_document_domains.split(",") if d.strip()]
+        return _parse_allowed_hosts(self.allowed_document_domains)
 
     @property
     def cors_origins(self) -> list[str]:
