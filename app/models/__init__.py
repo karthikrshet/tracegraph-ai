@@ -232,6 +232,7 @@ class PRChange(BaseModel):
     deletions: int = 0
     patch: str = ""  # raw diff patch
     changed_symbols: list[str] = Field(default_factory=list)  # detected symbol names
+    symbol_mapping_method: str = "declaration_in_diff"  # or file_scope_fallback
 
 
 # ─────────────────────────────────────────────

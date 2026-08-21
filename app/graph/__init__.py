@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from pathlib import Path
 from typing import Any
 
@@ -195,7 +196,8 @@ class GraphBuilder:
             c.change_type = item.change_type,
             c.additions = item.additions,
             c.deletions = item.deletions,
-            c.changed_symbols = item.changed_symbols
+            c.changed_symbols = item.changed_symbols,
+            c.symbol_mapping_method = item.symbol_mapping_method
         WITH c, item
         MATCH (pr:PullRequest {number: item.pr_number})
         MERGE (c)-[:PART_OF_PR]->(pr)
@@ -287,7 +289,8 @@ class GraphBuilder:
         MATCH (c:PRChange {id: item.change_id})
         MATCH (s:CodeSymbol) WHERE s.name = item.symbol_name AND s.file_path = item.file_path
         MERGE (c)-[r:MODIFIES]->(s)
-        SET r.delta_type = item.delta_type
+        SET r.delta_type = item.delta_type,
+            r.mapping_method = item.mapping_method
         """
         items = []
         for change in changes:
@@ -298,6 +301,7 @@ class GraphBuilder:
                         "symbol_name": sym_name,
                         "file_path": change.file_path,
                         "delta_type": change.change_type.value,
+                        "mapping_method": change.symbol_mapping_method,
                     }
                 )
         if items:
@@ -317,11 +321,6 @@ class GraphBuilder:
         Method: name-based matching (component name ↔ element label)
         Deterministic heuristic — no LLM.
         """
-        # Build lookup: normalized symbol name → symbol
-        sym_by_name: dict[str, CodeSymbol] = {}
-        for sym in symbols:
-            sym_by_name[sym.name.lower()] = sym
-
         edges_created = 0
         cypher = """
         MATCH (e:UIElement {id: $element_id}), (s:CodeSymbol {fqn: $symbol_fqn})
@@ -333,12 +332,14 @@ class GraphBuilder:
         with self._driver.session() as session:
             for element in elements:
                 label_normalized = element.label.lower().replace(" ", "").replace("-", "")
+                label_words = {word for word in re.findall(r"[a-z0-9]+", element.label.lower()) if len(word) > 2}
 
                 best_sym: CodeSymbol | None = None
                 best_score = 0.0
+                best_method = "name_match"
 
-                for sym_name, sym in sym_by_name.items():
-                    sym_normalized = sym_name.replace("_", "").lower()
+                for sym in symbols:
+                    sym_normalized = sym.name.replace("_", "").lower()
                     # Overlap score: how much of the label appears in the component name
                     words_in_label = [w.lower() for w in element.label.split() if len(w) > 3]
                     overlap = sum(1 for w in words_in_label if w in sym_normalized)
@@ -348,9 +349,19 @@ class GraphBuilder:
                     if label_normalized in sym_normalized or sym_normalized in label_normalized:
                         score = max(score, 0.8)
 
+                    method = "name_match"
+                    if score == 0:
+                        path_words = set(re.findall(r"[a-z0-9]+", sym.file_path.lower()))
+                        if "auth" in path_words:
+                            path_words.update({"login", "signin", "signup", "register", "authentication"})
+                        if label_words & path_words:
+                            score = 0.55
+                            method = "file_path_semantic_match"
+
                     if score > best_score:
                         best_score = score
                         best_sym = sym
+                        best_method = method
 
                 if best_sym and best_score >= 0.4:
                     session.run(
@@ -358,7 +369,7 @@ class GraphBuilder:
                         element_id=element.id,
                         symbol_fqn=best_sym.fqn,
                         confidence=round(best_score, 3),
-                        method="name_match",
+                        method=best_method,
                         evidence_type=EvidenceType.NAME_MATCH.value,
                     )
                     edges_created += 1
@@ -396,6 +407,7 @@ class GraphBuilder:
             "cart": ["cart", "basket", "quantity", "remove"],
             "checkout": ["checkout", "address", "shipping", "payment", "order"],
             "content": ["page", "content", "cms"],
+            "general": ["login", "sign in", "sign up", "register", "authentication", "article", "comment", "profile", "settings"],
         }
 
         edges_created = 0

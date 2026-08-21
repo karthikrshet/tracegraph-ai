@@ -718,6 +718,7 @@ class AutonomousCrawlerAgent:
         transitions: list[Transition] = []
         screen_graph: dict[str, list[str]] = {}
         visited_states: set[str] = set()
+        executed_actions: set[tuple[str, str]] = set()
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -809,7 +810,9 @@ class AutonomousCrawlerAgent:
                         break
 
                     # 2. Select next candidate action
-                    candidate = self._select_next_action(extracted)
+                    candidate = self._select_next_action(extracted, excluded_selectors={
+                        selector for action_url, selector in executed_actions if action_url == current_url
+                    })
                     if not candidate:
                         logger.info("No more safe unexplored interactive actions found on %s", current_url)
                         break
@@ -817,6 +820,7 @@ class AutonomousCrawlerAgent:
                     # 3. Execute interaction
                     action_selector = candidate.selector
                     action_label = candidate.label
+                    executed_actions.add((current_url, action_selector))
                     logger.info("Agent executing action: [%s] on selector %s", action_label, action_selector)
                     self._emit("action_selected", f"Agent selected action: {action_label}", {
                         "action_id": candidate.id,
@@ -877,17 +881,28 @@ class AutonomousCrawlerAgent:
         for sel, elem_type in selectors:
             try:
                 matches = await page.query_selector_all(sel)
-                for el in matches[:8]:
+                for index, el in enumerate(matches[:8], start=1):
                     text = (await el.inner_text() or "").strip()
                     dt_id = await el.get_attribute("data-testid") or ""
                     aria = await el.get_attribute("aria-label") or ""
                     label = dt_id or aria or text[:30] or f"{elem_type.capitalize()} Element"
 
+                    if dt_id:
+                        selector = f'[data-testid="{dt_id}"]'
+                    elif elem_type == "link":
+                        href = await el.get_attribute("href") or ""
+                        # CSS string escaping keeps a DOM-provided href as data,
+                        # rather than executable selector syntax.
+                        safe_href = href.replace("\\", "\\\\").replace('"', '\\"')
+                        selector = f'a[href="{safe_href}"]'
+                    else:
+                        selector = f"{sel}:nth-of-type({index})"
+
                     items.append(
                         UIElement(
                             id=f"UI-{page_id}-{counter:03d}",
                             page_id=page_id,
-                            selector=f"[data-testid='{dt_id}']" if dt_id else sel,
+                            selector=selector,
                             label=label,
                             element_type=elem_type,
                             text_content=text[:100],
@@ -901,20 +916,25 @@ class AutonomousCrawlerAgent:
 
         return items
 
-    def _select_next_action(self, elements: list[UIElement]) -> UIElement | None:
+    def _select_next_action(
+        self, elements: list[UIElement], excluded_selectors: set[str] | None = None
+    ) -> UIElement | None:
         """Exploration policy: choose high-value interactive element."""
+        excluded = excluded_selectors or set()
         for el in elements:
             label = el.label.lower()
-            if not self._is_safe_action(label, el.element_type):
+            if el.selector in excluded or not self._is_safe_action(label, el.element_type):
                 continue
-            if any(k in label for k in ["product", "cart", "checkout", "variant", "detail", "continue"]):
+            if any(k in label for k in ["product", "cart", "checkout", "variant", "detail", "continue", "sign up", "register", "sign in", "login"]):
                 return el
 
         for el in elements:
+            if el.selector in excluded:
+                continue
             if el.element_type in ("button", "link") and self._is_safe_action(el.label, el.element_type):
                 return el
 
-        return elements[0] if elements else None
+        return next((el for el in elements if el.selector not in excluded), None)
 
     def _save_artifacts(
         self,

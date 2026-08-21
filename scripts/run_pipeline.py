@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -39,11 +40,13 @@ async def _run(repo: str, pr_number: int, crawl_url: str, spec_url: str) -> None
     from app.config import get_settings
     from app.crawler import AutonomousCrawlerAgent
     from app.crawler.security import validate_crawl_url
+    from app.crawler.session_manager import CrawlConfiguration, CrawlSession
     from app.graph import GraphBuilder
     from app.ingestor import RequirementIngestor
     from app.llm import get_llm_provider
     from app.models import UserFlow
     from app.pr_analyzer import PRAnalyzer
+    from app.provenance import build_run_manifest
 
     settings = get_settings()
     crawl_validation = validate_crawl_url(crawl_url, allowed_hosts=settings.allowed_domains)
@@ -59,15 +62,37 @@ async def _run(repo: str, pr_number: int, crawl_url: str, spec_url: str) -> None
     requirements = await RequirementIngestor(llm=llm, data_dir=data_dir).run(source_urls=[spec_url])
 
     console.print("[bold]2/5 Crawling the selected live application[/bold]")
+    crawl_id = f"cli_pr_{pr_number}"
     crawler = AutonomousCrawlerAgent(
         base_url=crawl_url,
         data_dir=data_dir,
-        session_id=f"cli_pr_{pr_number}",
+        session_id=crawl_id,
         allowed_domains=settings.allowed_domains,
     )
-    pages, elements, transitions, _ = await crawler.explore(max_pages=10, max_actions=25)
+    # A narrow, bounded slice is intentional for a take-home run: it captures
+    # independent screen states and transitions without broad or repeated clicks.
+    pages, elements, transitions, screen_graph = await crawler.explore(max_pages=5, max_actions=5)
     if not pages or not elements:
         raise RuntimeError("Crawl returned no observable pages or UI elements; graph build aborted.")
+    crawl_dir = data_dir / "artifacts" / "crawls" / crawl_id
+    crawl_session = CrawlSession(
+        id=crawl_id,
+        start_url=crawl_url,
+        status="COMPLETED",
+        completed_at=datetime.utcnow(),
+        configuration=CrawlConfiguration(start_url=crawl_url, allowed_domains=settings.allowed_domains),
+        pages_discovered=len(pages),
+        elements_discovered=len(elements),
+        actions_executed=len(transitions),
+        transitions_discovered=len(transitions),
+        states_discovered=len(pages),
+        pages=pages,
+        elements=elements,
+        transitions=transitions,
+        screen_graph=screen_graph,
+        artifacts_dir=str(crawl_dir),
+    )
+    (crawl_dir / "session.json").write_text(crawl_session.model_dump_json(indent=2), encoding="utf-8")
 
     host = urlparse(crawl_url).hostname or "application"
     flow = UserFlow(
@@ -76,6 +101,9 @@ async def _run(repo: str, pr_number: int, crawl_url: str, spec_url: str) -> None
         description="A browser-observed path. Requirement links are created only after UI coverage is found.",
         steps=[page.id for page in pages],
     )
+    for step_order, page in enumerate(pages, start=1):
+        page.flow_id = flow.id
+        page.step_order = step_order
 
     console.print("[bold]3/5 Fetching the real pull request and changed source files[/bold]")
     code_data = await CodeAnalyzer(github_token=settings.github_token, data_dir=data_dir).run(repo, pr_number)
@@ -106,7 +134,7 @@ async def _run(repo: str, pr_number: int, crawl_url: str, spec_url: str) -> None
         console.print("[bold]5/5 Computing the deterministic blast-radius traversal[/bold]")
         pr_meta = code_data["pr"]
         report = await PRAnalyzer(graph=graph, llm=llm, data_dir=data_dir).analyze(
-            pr_number=pr_meta.number, pr_title=pr_meta.title, pr_url=pr_meta.html_url
+            pr_number=pr_meta.number, pr_title=pr_meta.title, pr_url=pr_meta.html_url, repo=repo
         )
     finally:
         graph.close()
@@ -118,7 +146,20 @@ async def _run(repo: str, pr_number: int, crawl_url: str, spec_url: str) -> None
         f"Flows: {len(report.impacted_flows)} | Requirements: {len(report.impacted_requirements)}",
         title="Provenance-verified report",
     ))
-    console.print(f"Report: [cyan]{data_dir / f'blast_radius_pr_{pr_number}.md'}[/cyan]")
+    report_path = data_dir / f"blast_radius_pr_{pr_number}.md"
+    manifest_path = build_run_manifest(
+        data_dir=data_dir,
+        crawl_id=crawl_id,
+        app_url=crawl_url,
+        spec_url=spec_url,
+        repo=repo,
+        pr_number=pr_number,
+        pr_head_sha=pr_meta.head_sha,
+        report_path=report_path,
+        node_counts=counts,
+    )
+    console.print(f"Report: [cyan]{report_path}[/cyan]")
+    console.print(f"Evidence manifest: [cyan]{manifest_path}[/cyan]")
 
 
 if __name__ == "__main__":

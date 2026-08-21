@@ -41,7 +41,9 @@ class LLMProvider(ABC):
         max_tokens: int = 2048,
     ) -> dict[str, Any]:
         """Complete and parse as JSON. Returns {} on failure."""
-        raw = await self.complete(system, user, temperature, max_tokens)
+        # Structured extraction must leave enough room for a complete JSON array;
+        # a truncated response is rejected rather than partially trusted.
+        raw = await self.complete(system, user, temperature, max(max_tokens, 4096))
         try:
             # Extract JSON block if wrapped in markdown
             if "```json" in raw:

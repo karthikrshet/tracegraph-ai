@@ -37,6 +37,7 @@ class GitHubEvidenceError(RuntimeError):
 _COMPONENT_RE = re.compile(
     r"(?:export\s+(?:const|function|default\s+function)\s+)([A-Z][a-zA-Z0-9_]*)"
 )
+_CLASS_RE = re.compile(r"(?:export\s+)?(?:abstract\s+)?class\s+([A-Z][a-zA-Z0-9_]*)")
 _HOOK_RE = re.compile(r"(?:export\s+(?:const|function)\s+)(use[A-Z][a-zA-Z0-9_]*)")
 _FUNCTION_RE = re.compile(r"(?:export\s+(?:async\s+)?function\s+)([a-z][a-zA-Z0-9_]*)")
 _ARROW_FN_RE = re.compile(
@@ -114,6 +115,8 @@ def extract_symbols_from_content(file_path: str, content: str) -> list[CodeSymbo
         )
 
     for i, line in enumerate(lines):
+        for m in _CLASS_RE.finditer(line):
+            add_symbol(m.group(1), "class", i)
         for m in _COMPONENT_RE.finditer(line):
             name = m.group(1)
             add_symbol(name, "component" if _is_react_component(name) else "function", i)
@@ -256,6 +259,14 @@ class CodeAnalyzer:
             # A patch can omit source because GitHub truncates large diffs. In that case
             # retain the file as an unmapped review item rather than claiming symbols changed.
             changed_symbols = [symbol for symbol in parsed_symbols if symbol.name in changed_names]
+            if not changed_symbols:
+                # Existing Angular/TypeScript components commonly change methods
+                # without redeclaring the class in the diff. Keep the real source
+                # symbol, but label the coarser file-scope association explicitly.
+                changed_symbols = [symbol for symbol in parsed_symbols if symbol.is_component][:1]
+                if changed_symbols:
+                    change.changed_symbols = [symbol.name for symbol in changed_symbols]
+                    change.symbol_mapping_method = "file_scope_fallback"
             code_files.append(
                 CodeFile(
                     path=file_path,
