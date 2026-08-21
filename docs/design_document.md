@@ -126,22 +126,21 @@ The dashboard provides a dedicated **Crawl Application Control Center** featurin
 ```cypher
 // Layer 1: Requirements
 (:Requirement {
-  id: "REQ-003",
-  text: "Attribute dropdowns must show available values...",
-  category: "product_attributes",
-  source_url: "https://docs.saleor.io/...",
-  testability_score: 0.94,
+  id: "REQ-001",
+  text: "Users can authenticate using login and signup pages...",
+  category: "general",
+  source_url: "https://raw.githubusercontent.com/.../README.md",
+  testability_score: 0.95,
   coverage_status: "COVERED"  // COVERED | PARTIAL | UNVERIFIED | ABSENT
 })
 
 // Layer 2: UI & State Graph
 (:UIElement {
-  id: "UI-001",
-  page_id: "PAGE-02",
-  selector: "[data-testid='variantPicker']",
-  label: "Product Attribute Dropdown",
-  element_type: "combobox",
-  data_test_id: "variantPicker"
+  id: "UI-PAGE-01-003",
+  page_id: "PAGE-01",
+  selector: "a[href='/register']",
+  label: "Sign up",
+  element_type: "link"
 })
 
 (:Page { id: "PAGE-01", url, title, flow_id, step_order, screenshot_path, dom_path })
@@ -149,25 +148,26 @@ The dashboard provides a dedicated **Crawl Application Control Center** featurin
 (:UserFlow { id: "FLOW-01", name: "Product Browse to Add to Cart", description: "..." })
 
 // Layer 3: Code
-(:CodeFile { path: "src/components/Attributes/DropdownRow.tsx", language: "typescript", component_name: "DropdownRow" })
+(:CodeFile { path: "src/app/core/auth/auth.component.ts", language: "typescript", component_name: "auth.component" })
 (:CodeSymbol {
-  fqn: "DropdownRow.DropdownRow",
-  name: "DropdownRow",
-  symbol_type: "component",
-  file_path: "src/components/Attributes/DropdownRow.tsx",
+  fqn: "auth.component.AuthComponent",
+  name: "AuthComponent",
+  symbol_type: "class",
+  file_path: "src/app/core/auth/auth.component.ts",
   start_line: 1, end_line: 50,
   is_component: true, is_hook: false, exported: true
 })
 
 // PR
-(:PullRequest { number: 6857, title: "Give each attribute dropdown its own cache", author: "mirekm", html_url: "...", head_sha: "..." })
+(:PullRequest { number: 350, title: "Secure auth flows and harden validation across the UI", html_url: "...", head_sha: "fc438..." })
 (:PRChange {
-  id: "change-6857-DropdownRow.tsx",
-  pr_number: 6857,
-  file_path: "src/components/Attributes/DropdownRow.tsx",
+  id: "change-350-src_app_core_auth_auth.component.ts",
+  pr_number: 350,
+  file_path: "src/app/core/auth/auth.component.ts",
   change_type: "modified",
   additions: 84, deletions: 62,
-  changed_symbols: ["DropdownRow", "toOptions", "mergeOptions", "filterOptions"]
+  changed_symbols: ["AuthComponent"],
+  symbol_mapping_method: "file_scope_fallback"
 })
 ```
 
@@ -227,7 +227,7 @@ This directly addresses the assignment's question about confidence under ambigui
 
 **Blast Radius (the core query):**
 ```cypher
-MATCH (pr:PullRequest {number: 6857})<-[:PART_OF_PR]-(change:PRChange)
+MATCH (pr:PullRequest {number: 350})<-[:PART_OF_PR]-(change:PRChange)
 OPTIONAL MATCH (change)-[:TOUCHES]->(file:CodeFile)
 OPTIONAL MATCH (change)-[:MODIFIES]->(sym:CodeSymbol)
 OPTIONAL MATCH (ui:UIElement)-[:IMPLEMENTED_BY]->(sym)
@@ -245,10 +245,10 @@ RETURN r.id, r.text, r.category, r.coverage_status
 
 **Evidence Chain for one requirement:**
 ```cypher
-MATCH path = (pr:PullRequest {number: 6857})<-[:PART_OF_PR]-(c:PRChange)
+MATCH path = (pr:PullRequest {number: 350})<-[:PART_OF_PR]-(c:PRChange)
   -[:MODIFIES]->(sym:CodeSymbol)<-[:IMPLEMENTED_BY]-(ui:UIElement)
   -[:PART_OF]->(page:Page)-[:STEP_IN]->(flow:UserFlow)
-  -[:REQUIRES]->(req:Requirement {id: "REQ-003"})
+  -[:REQUIRES]->(req:Requirement {id: "REQ-001"})
 RETURN nodes(path), relationships(path)
 ```
 
