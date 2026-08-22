@@ -584,20 +584,43 @@ async function viewDiscoveredTransitions(crawlId) {
 async function applyCrawlToGraph(crawlId) {
   if (!crawlId) return;
   try {
-    appendFeedLine("SYSTEM", `Applying discovered artifacts from ${crawlId} to active Knowledge Graph...`);
+    appendFeedLine("SYSTEM", `Staging discovered artifacts from ${crawlId} for graph construction...`);
     const res = await fetch(`/api/crawl/${crawlId}/apply-to-graph`, { method: "POST" });
     const data = await res.json();
-    appendFeedLine("SYSTEM", data.message || "Artifacts ingested into graph!");
+    if (!res.ok) throw new Error(data.detail || "Could not stage crawl evidence.");
+    appendFeedLine("SYSTEM", data.message || "Crawl evidence staged.");
 
-    // Switch to Knowledge Graph tab
-    const graphTabBtn = document.querySelector(".tab-item[data-tab='graphView']");
-    if (graphTabBtn) graphTabBtn.click();
     const repo = document.getElementById("inputRepo").value.trim();
     const prNumber = Number.parseInt(document.getElementById("inputPRNumber").value, 10);
-    if (repo && Number.isInteger(prNumber)) await loadKnowledgeGraph(repo, prNumber);
+    if (!repo || !Number.isInteger(prNumber)) {
+      appendFeedLine("SYSTEM", "Crawl evidence is staged. Enter the matching GitHub repository and PR, then click Re-Index Graph to build all three layers.");
+      showGraphSetupMessage("Crawl evidence is staged. Select the matching GitHub repository and PR in Blast Radius, then click Re-Index Graph.");
+      return;
+    }
+
+    appendFeedLine("SYSTEM", `Building Requirements → UI → Code graph for ${repo}#${prNumber}...`);
+    const buildResponse = await fetch("/api/build-graph", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pr_number: prNumber, repo, crawl_id: crawlId }),
+    });
+    const buildData = await buildResponse.json();
+    if (!buildResponse.ok) throw new Error(buildData.detail || "Three-layer graph build failed.");
+    appendFeedLine("SYSTEM", `Three-layer graph built: ${JSON.stringify(buildData.node_counts || {})}`);
+
+    // Switch only after a complete, provenance-backed graph exists.
+    const graphTabBtn = document.querySelector(".tab-item[data-tab='graphView']");
+    if (graphTabBtn) graphTabBtn.click();
+    await loadKnowledgeGraph(repo, prNumber);
   } catch (err) {
     appendFeedLine("ERROR", `Failed to apply to graph: ${err.message}`);
   }
+}
+
+function showGraphSetupMessage(message) {
+  const container = document.getElementById("networkGraph");
+  if (!container) return;
+  container.innerHTML = `<div class="graph-empty-state text-muted">${escapeHtml(message)}</div>`;
 }
 
 async function loadCrawlSessions() {

@@ -402,7 +402,7 @@ async def get_crawl_artifact(crawl_id: str, artifact_type: str, filename: str) -
 
 @app.post("/api/crawl/{crawl_id}/apply-to-graph", dependencies=[Depends(require_api_auth)])
 async def apply_crawl_to_graph(crawl_id: str) -> dict[str, Any]:
-    """Apply discovered crawl session pages, elements, and transitions to the active knowledge graph."""
+    """Stage discovered crawl evidence for a subsequent three-layer graph build."""
     settings = get_settings()
     manager = CrawlSessionManager.get_instance(settings.data_dir)
     session = manager.get_session(crawl_id)
@@ -421,7 +421,10 @@ async def apply_crawl_to_graph(crawl_id: str) -> dict[str, Any]:
 
     return {
         "status": "ok",
-        "message": f"Applied {len(session.pages)} pages and {len(session.elements)} elements from {crawl_id} to graph.",
+        "message": (
+            f"Staged {len(session.pages)} pages, {len(session.elements)} elements, and "
+            f"{len(session.transitions)} transitions from {crawl_id}."
+        ),
     }
 
 
