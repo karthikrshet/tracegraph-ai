@@ -393,7 +393,12 @@ async function startAutonomousCrawl() {
     });
 
     if (!res.ok) {
-      throw new Error(await readApiError(res, "The crawl could not be started"));
+      const message = await readApiError(res, "The crawl could not be started");
+      const error = new Error(message);
+      if (res.status === 503 && message.includes("Vercel serverless runtime")) {
+        error.code = "BROWSER_WORKER_REQUIRED";
+      }
+      throw error;
     }
 
     const data = await res.json();
@@ -404,7 +409,13 @@ async function startAutonomousCrawl() {
     subscribeToCrawlEvents(currentCrawlId);
   } catch (err) {
     appendFeedLine("ERROR", `Failed: ${err.message}`);
-    stopCrawlUI("FAILED");
+    if (err.code === "BROWSER_WORKER_REQUIRED") {
+      document.getElementById("liveCurrentScreen").innerText = "Dedicated browser worker required";
+      document.getElementById("liveCurrentAction").innerText = "Run the Docker deployment for evidence capture";
+      stopCrawlUI("WORKER REQUIRED");
+    } else {
+      stopCrawlUI("FAILED");
+    }
   }
 }
 

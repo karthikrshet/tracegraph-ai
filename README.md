@@ -72,6 +72,10 @@ uvicorn app.api.main:app --reload --port 8000
 
 Start with a live crawl and an explicit documentation URL. Select the same crawl ID when building the graph; the API rejects graph builds with missing requirements, incomplete crawl data, missing code evidence, or unavailable Neo4j.
 
+### Deployment boundary
+
+The full evidence pipeline requires the Docker API runtime (or an equivalent dedicated worker) because it owns a Playwright browser, server-sent crawl progress, writable artifact storage, and Neo4j connectivity. A Vercel deployment can host the dashboard and read-only API preview, but it intentionally returns **Worker required** for a live crawl rather than fabricating DOM, screenshot, or session evidence. Use the Docker deployment for the Loom and final evidence run.
+
 ## Evaluation
 
 Tests exercise parsers, SSRF defenses, API guards, safe failure modes, and deterministic report assembly:
