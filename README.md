@@ -263,6 +263,7 @@ The reference evidence record is [docs/evidence_run_pr_350.md](docs/evidence_run
 |---|---|
 | `localhost:8000 refused to connect` | Neo4j alone is running. Start the dashboard/API with `docker compose up -d --build api`, then inspect `docker compose logs --tail=100 api`. |
 | `dockerDesktopLinuxEngine ... file not found` | Docker Desktop is stopped. Start it and wait for `docker version` to show a Server section. |
+| `BrowserType.launch: Executable doesn't exist` | The API image is missing its matching Playwright browser bundle. Pull the latest code, then rebuild/start it with `docker compose up -d --build api`; do not treat the failed crawl as evidence. |
 | `Host ... is not in the configured allowlist` | Add only the intended public host to `ALLOWED_CRAWL_DOMAINS` in `.env`, then re-run the CLI or restart the API. Private and metadata IP protections remain active. |
 | `Missing option --repo` or `--repo is not recognized` | A Bash `\` was pasted into Command Prompt. Use the one-line CMD command above or PowerShell backticks. |
 | `Worker required` on Vercel | Expected: Vercel serverless cannot run a durable Playwright crawl. Use the Docker deployment or a dedicated browser worker. |

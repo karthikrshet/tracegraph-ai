@@ -46,6 +46,8 @@ function safeIdentifier(value) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  const persistedCrawlId = safeIdentifier(window.localStorage.getItem("tracegraph-active-crawl"));
+  if (persistedCrawlId) currentCrawlId = persistedCrawlId;
   initTabs();
   initPipelineSteps();
   initCrawlControls();
@@ -339,15 +341,15 @@ function initSpecIngestControls() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ source_urls: sourceUrl ? [sourceUrl] : [], source_text: sourceText })
         });
+        if (!res.ok) throw new Error(await readApiError(res, "Specification ingestion failed"));
         const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || "Specification ingestion failed.");
         document.getElementById("specSourceBadge").innerText = "Public source ingested";
         document.getElementById("specSourceBadge").className = "badge badge-success";
         document.getElementById("ingestCountDisplay").innerText = `${data.requirements_ingested} requirements`;
         document.getElementById("specCategoriesDisplay").innerText = (data.categories || []).join(", ") || "—";
         await loadIngestedRequirements();
       } catch (err) {
-        document.getElementById("specSourceBadge").innerText = `Ingestion failed: ${err.message}`;
+        document.getElementById("specSourceBadge").innerText = `Ingestion failed; existing evidence retained: ${err.message}`;
         document.getElementById("specSourceBadge").className = "badge badge-danger";
       } finally {
         btnIngest.disabled = false;
@@ -390,6 +392,7 @@ async function loadDocumentSourcePolicy() {
 async function loadIngestedRequirements() {
   try {
     const res = await fetch("/api/requirements");
+    if (!res.ok) throw new Error(await readApiError(res, "Requirements could not be loaded"));
     const data = await res.json();
     const reqs = data.requirements || [];
     const tbody = document.querySelector("#tableIngestedReqs tbody");
@@ -430,6 +433,14 @@ async function loadIngestedRequirements() {
     const tbody = document.querySelector("#tableIngestedReqs tbody");
     if (tbody) tbody.innerHTML = "<tr><td colspan='5' class='text-muted'>No real specification has been ingested yet.</td></tr>";
   }
+}
+
+function selectCrawlForGraph(crawlId) {
+  const safeCrawlId = safeIdentifier(crawlId);
+  if (!safeCrawlId) return;
+  currentCrawlId = safeCrawlId;
+  window.localStorage.setItem("tracegraph-active-crawl", safeCrawlId);
+  appendFeedLine("SYSTEM", `Selected completed crawl ${safeCrawlId} for graph construction.`);
 }
 
 function customPublicHostEnabled() {
@@ -606,11 +617,15 @@ function handleCrawlEvent(evt) {
     const cnt = parseInt(document.getElementById("liveStatTransitions").innerText, 10) + 1;
     document.getElementById("liveStatTransitions").innerText = cnt;
   } else if (type === "crawl_completed") {
+    selectCrawlForGraph(currentCrawlId);
     stopCrawlUI("COMPLETED ✓");
     document.getElementById("crawlPostToolbar").classList.remove("hidden");
     if (data.pages) document.getElementById("liveStatPages").innerText = data.pages;
     if (data.transitions) document.getElementById("liveStatTransitions").innerText = data.transitions;
   } else if (type === "crawl_failed" || type === "crawl_cancelled" || type === "crawl_timeout") {
+    if (window.localStorage.getItem("tracegraph-active-crawl") === currentCrawlId) {
+      window.localStorage.removeItem("tracegraph-active-crawl");
+    }
     stopCrawlUI(type.replace("crawl_", "").toUpperCase());
   }
 }
@@ -884,12 +899,15 @@ async function loadCrawlSessions() {
         <td><strong>${s.transitions_discovered}</strong></td>
         <td><small>${s.started_at ? s.started_at.split("T")[0] : "—"}</small></td>
         <td>
+          ${s.status === "COMPLETED" ? `<button class="btn btn-tool" data-graph-session-id="${escapeHtml(sessionId)}">Use for Graph</button>` : ""}
           <button class="btn btn-tool" data-session-id="${escapeHtml(sessionId)}">Screens</button>
           <button class="btn btn-tool" data-transition-session-id="${escapeHtml(sessionId)}">Transitions</button>
         </td>
       `;
       row.querySelector("[data-session-id]").addEventListener("click", () => viewDiscoveredScreens(sessionId));
       row.querySelector("[data-transition-session-id]").addEventListener("click", () => viewDiscoveredTransitions(sessionId));
+      const graphButton = row.querySelector("[data-graph-session-id]");
+      if (graphButton) graphButton.addEventListener("click", () => selectCrawlForGraph(sessionId));
       tbody.appendChild(row);
     });
   } catch (err) {
@@ -967,7 +985,7 @@ function initPRControls() {
       const repo = document.getElementById("inputRepo").value.trim();
       const pr = parseInt(document.getElementById("inputPRNumber").value, 10);
       if (!currentCrawlId) {
-        alert("Run and select a completed crawl before building the knowledge graph.");
+        setAnalysisUnavailable("Select a completed crawl in Crawl Sessions using ‘Use for Graph’ before re-indexing.");
         return;
       }
       if (!repo || !Number.isInteger(pr)) {
@@ -1091,6 +1109,23 @@ function formatMarkdownToHtml(text) {
     .replace(/\n/gim, '<br>');
 }
 
+function groupEquivalentUIImpacts(items) {
+  const groups = new Map();
+  (items || []).forEach(item => {
+    // The graph keeps every captured selector as an independent node. The
+    // report table groups only visually equivalent labels reached through the
+    // same changed symbol, while retaining the true instance count.
+    const label = String(item.label || item.item_id || "Observed UI element");
+    const baseLabel = label.replace(/\s+\([^)]*\/[^)]*\)$/, "").trim() || label;
+    const symbol = String((item.evidence_chain || []).slice(-2, -1)[0] || "unmapped-symbol");
+    const key = `${symbol.toLowerCase()}|${baseLabel.toLowerCase()}`;
+    const group = groups.get(key) || { item, baseLabel, instances: [] };
+    group.instances.push(item);
+    groups.set(key, group);
+  });
+  return [...groups.values()];
+}
+
 function renderBlastRadiusReport(report) {
   // Populate Live AI Executive Summary
   const summaryEl = document.getElementById("llmExecutiveSummary");
@@ -1109,10 +1144,14 @@ function renderBlastRadiusReport(report) {
   // Populate UI table
   const uiTbody = document.querySelector("#tableImpactedUI tbody");
   uiTbody.innerHTML = "";
-  (report.impacted_ui_elements || []).forEach(item => {
+  groupEquivalentUIImpacts(report.impacted_ui_elements).forEach(group => {
+    const item = group.item;
+    const instanceText = group.instances.length === 1
+      ? "1 observed selector"
+      : `${group.instances.length} observed selectors`;
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td><strong>${escapeHtml(item.label)}</strong></td>
+      <td><strong>${escapeHtml(group.baseLabel)}</strong><br><small class="text-muted">${escapeHtml(instanceText)}</small></td>
       <td><code>${escapeHtml(item.element_type || "UIElement")}</code></td>
       <td>${riskBadge(item.risk_level)}</td>
       <td><code>${(item.confidence * 100).toFixed(0)}%</code></td>

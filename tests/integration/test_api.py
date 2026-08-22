@@ -192,6 +192,20 @@ def test_ingest_endpoint(client):
     assert data["categories"] == ["product"]
 
 
+def test_ingest_returns_a_json_validation_error_when_extraction_fails(client, monkeypatch):
+    """A failed real source must not become a browser-side JSON parser error."""
+    from app.ingestor import RequirementIngestor
+
+    async def rejected_ingest(self, source_urls, source_text=""):
+        raise ValueError("No testable requirements were extracted from the selected documentation sources.")
+
+    monkeypatch.setattr(RequirementIngestor, "run", rejected_ingest)
+    response = client.post("/api/ingest", json={"source_urls": ["https://docs.saleor.io/developer/products"]})
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("No testable requirements")
+
+
 def test_ingest_rejects_mock_provider(client, monkeypatch):
     """The API must not turn a mock provider into apparent product evidence."""
     import app.api.main as main_mod

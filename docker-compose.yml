@@ -29,8 +29,12 @@ services:
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
       - NEO4J_PASSWORD=${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env before starting Compose}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - XAI_BASE_URL=${XAI_BASE_URL:-https://api.x.ai/v1}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
@@ -40,6 +44,11 @@ services:
       - APP_ENV=${APP_ENV:-development}
       - API_BEARER_TOKEN=${API_BEARER_TOKEN:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8000}
+      - ALLOWED_CRAWL_DOMAINS=${ALLOWED_CRAWL_DOMAINS:-}
+      - ALLOWED_DOCUMENT_DOMAINS=${ALLOWED_DOCUMENT_DOMAINS:-github.com,raw.githubusercontent.com}
+      - ALLOW_CUSTOM_CRAWL_HOSTS=${ALLOW_CUSTOM_CRAWL_HOSTS:-}
+      - CRAWLER_TIMEOUT=${CRAWLER_TIMEOUT:-30000}
+      - CRAWLER_MAX_DEPTH=${CRAWLER_MAX_DEPTH:-3}
     volumes:
       - ./data:/app/data
     depends_on:

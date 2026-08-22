@@ -7,6 +7,7 @@ FROM python:3.10.14-slim-bookworm AS base
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PORT=8000
 
 WORKDIR /app
@@ -26,8 +27,11 @@ RUN pip install --upgrade pip && \
     pip install .
 
 # A browser crawl is a required evidence source, so image creation must fail if
-# Chromium cannot be installed.
-RUN playwright install --with-deps chromium
+# Chromium cannot be installed. Keep the browser at a fixed shared path: the
+# build runs as root but the API runs as appuser, and Playwright otherwise
+# looks in different per-user caches at build and runtime.
+RUN playwright install --with-deps chromium && \
+    test -d "$PLAYWRIGHT_BROWSERS_PATH"
 
 COPY scripts/ ./scripts/
 COPY docs/ ./docs/
@@ -38,7 +42,7 @@ COPY conftest.py .
 # Create non-root user for security
 RUN useradd -m -u 1000 appuser && \
     mkdir -p /app/data && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app "$PLAYWRIGHT_BROWSERS_PATH"
 
 USER appuser
 

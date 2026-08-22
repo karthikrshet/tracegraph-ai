@@ -199,8 +199,19 @@ async def ingest_requirements(req: IngestRequest) -> dict[str, Any]:
     settings = get_settings()
     llm = require_real_llm()
     ingestor = RequirementIngestor(llm=llm, data_dir=settings.data_dir)
-
-    requirements = await ingestor.run(source_urls=req.source_urls, source_text=req.source_text)
+    try:
+        requirements = await ingestor.run(source_urls=req.source_urls, source_text=req.source_text)
+    except ValueError as exc:
+        # Source retrieval and extraction failures are expected operational
+        # states. Preserve the previously persisted evidence and return a
+        # machine-readable response rather than FastAPI's HTML 500 page.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Requirement ingestion failed")
+        raise HTTPException(
+            status_code=502,
+            detail="Specification ingestion failed before evidence could be persisted. Check the configured provider and source.",
+        ) from exc
 
     return {
         "status": "ok",
