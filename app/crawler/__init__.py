@@ -35,309 +35,6 @@ class CrawlEvidenceError(RuntimeError):
     """Raised when a browser crawl cannot produce verifiable browser evidence."""
 
 
-class CrawlerArtifact:
-    """Static pre-captured artifacts for when Playwright is not available."""
-
-    STATIC_PAGES = [
-        Page(
-            id="PAGE-01",
-            url=f"{BASE_URL}/",
-            title="Product Listing",
-            flow_id="FLOW-01",
-            step_order=1,
-            screenshot_path="artifacts/flow01_step1_listing.png",
-            dom_path="artifacts/flow01_step1_listing.html",
-        ),
-        Page(
-            id="PAGE-02",
-            url=f"{BASE_URL}/products/apple-juice/",
-            title="Product Detail",
-            flow_id="FLOW-01",
-            step_order=2,
-            screenshot_path="artifacts/flow01_step2_detail.png",
-            dom_path="artifacts/flow01_step2_detail.html",
-        ),
-        Page(
-            id="PAGE-03",
-            url=f"{BASE_URL}/cart/",
-            title="Shopping Cart",
-            flow_id="FLOW-01",
-            step_order=3,
-            screenshot_path="artifacts/flow01_step3_cart.png",
-            dom_path="artifacts/flow01_step3_cart.html",
-        ),
-        Page(
-            id="PAGE-04",
-            url=f"{BASE_URL}/checkout/",
-            title="Checkout Start",
-            flow_id="FLOW-02",
-            step_order=1,
-            screenshot_path="artifacts/flow02_step1_checkout.png",
-            dom_path="artifacts/flow02_step1_checkout.html",
-        ),
-        Page(
-            id="PAGE-05",
-            url=f"{BASE_URL}/checkout/address/",
-            title="Checkout Address",
-            flow_id="FLOW-02",
-            step_order=2,
-            screenshot_path="artifacts/flow02_step2_address.png",
-            dom_path="artifacts/flow02_step2_address.html",
-        ),
-        Page(
-            id="PAGE-06",
-            url=f"{BASE_URL}/checkout/shipping/",
-            title="Checkout Shipping",
-            flow_id="FLOW-03",
-            step_order=1,
-            screenshot_path="artifacts/flow03_step1_shipping.png",
-            dom_path="artifacts/flow03_step1_shipping.html",
-        ),
-        Page(
-            id="PAGE-07",
-            url=f"{BASE_URL}/checkout/payment/",
-            title="Checkout Payment",
-            flow_id="FLOW-03",
-            step_order=2,
-            screenshot_path="artifacts/flow03_step2_payment.png",
-            dom_path="artifacts/flow03_step2_payment.html",
-        ),
-        Page(
-            id="PAGE-08",
-            url=f"{BASE_URL}/order-confirmation/",
-            title="Order Confirmation",
-            flow_id="FLOW-03",
-            step_order=3,
-            screenshot_path="artifacts/flow03_step3_confirmation.png",
-            dom_path="artifacts/flow03_step3_confirmation.html",
-        ),
-    ]
-
-    STATIC_ELEMENTS = [
-        UIElement(
-            id="UI-001",
-            page_id="PAGE-02",
-            selector="[data-testid='variantPicker']",
-            label="Product Variant Picker",
-            element_type="combobox",
-            data_test_id="variantPicker",
-        ),
-        UIElement(
-            id="UI-002",
-            page_id="PAGE-02",
-            selector="[data-testid='addToCartButton']",
-            label="Add to Cart Button",
-            element_type="button",
-            data_test_id="addToCartButton",
-        ),
-        UIElement(
-            id="UI-003",
-            page_id="PAGE-02",
-            selector="[data-testid='productDescription']",
-            label="Product Description Text",
-            element_type="text",
-            data_test_id="productDescription",
-        ),
-        UIElement(
-            id="UI-004",
-            page_id="PAGE-02",
-            selector="[data-testid='price']",
-            label="Product Price Display",
-            element_type="text",
-            data_test_id="price",
-        ),
-        UIElement(
-            id="UI-005",
-            page_id="PAGE-02",
-            selector="select[name='quantity']",
-            label="Product Quantity Selector",
-            element_type="select",
-        ),
-        UIElement(
-            id="UI-006",
-            page_id="PAGE-01",
-            selector="[data-testid='productCard']",
-            label="Product Card in Listing",
-            element_type="link",
-            data_test_id="productCard",
-        ),
-        UIElement(
-            id="UI-007",
-            page_id="PAGE-01",
-            selector="[data-testid='filtersList']",
-            label="Product Filter Sidebar",
-            element_type="list",
-            data_test_id="filtersList",
-        ),
-        UIElement(
-            id="UI-008",
-            page_id="PAGE-01",
-            selector="[data-testid='sortBySelect']",
-            label="Sort By Dropdown",
-            element_type="select",
-            data_test_id="sortBySelect",
-        ),
-        UIElement(
-            id="UI-009",
-            page_id="PAGE-03",
-            selector="[data-testid='cartRow']",
-            label="Cart Item Row",
-            element_type="list-item",
-            data_test_id="cartRow",
-        ),
-        UIElement(
-            id="UI-010",
-            page_id="PAGE-03",
-            selector="[data-testid='checkoutButton']",
-            label="Proceed to Checkout Button",
-            element_type="button",
-            data_test_id="checkoutButton",
-        ),
-        UIElement(
-            id="UI-011",
-            page_id="PAGE-03",
-            selector="[data-testid='totalPrice']",
-            label="Cart Total Price",
-            element_type="text",
-            data_test_id="totalPrice",
-        ),
-        UIElement(
-            id="UI-012",
-            page_id="PAGE-05",
-            selector="[name='firstName']",
-            label="First Name Input",
-            element_type="input",
-        ),
-        UIElement(
-            id="UI-013",
-            page_id="PAGE-05",
-            selector="[name='streetAddress1']",
-            label="Street Address Input",
-            element_type="input",
-        ),
-        UIElement(
-            id="UI-014",
-            page_id="PAGE-05",
-            selector="[data-testid='countrySelectorDropdown']",
-            label="Country Selector Dropdown",
-            element_type="select",
-            data_test_id="countrySelectorDropdown",
-        ),
-        UIElement(
-            id="UI-015",
-            page_id="PAGE-05",
-            selector="[data-testid='continueToShippingButton']",
-            label="Continue to Shipping Button",
-            element_type="button",
-            data_test_id="continueToShippingButton",
-        ),
-        UIElement(
-            id="UI-016",
-            page_id="PAGE-07",
-            selector="[data-testid='dummyPaymentGateway']",
-            label="Payment Method Selection",
-            element_type="radio",
-            data_test_id="dummyPaymentGateway",
-        ),
-        UIElement(
-            id="UI-017",
-            page_id="PAGE-07",
-            selector="[data-testid='placeOrderButton']",
-            label="Place Order Button",
-            element_type="button",
-            data_test_id="placeOrderButton",
-        ),
-    ]
-
-    STATIC_TRANSITIONS = [
-        Transition(
-            id="TRANS-001",
-            from_page_id="PAGE-01",
-            to_page_id="PAGE-02",
-            trigger_element_id="UI-006",
-            interaction_type="click",
-            action_label="Click Product Card (Apple Juice)",
-        ),
-        Transition(
-            id="TRANS-002",
-            from_page_id="PAGE-02",
-            to_page_id="PAGE-03",
-            trigger_element_id="UI-002",
-            interaction_type="click",
-            action_label="Click Add to Cart Button",
-        ),
-        Transition(
-            id="TRANS-003",
-            from_page_id="PAGE-03",
-            to_page_id="PAGE-04",
-            trigger_element_id="UI-010",
-            interaction_type="click",
-            action_label="Click Proceed to Checkout Button",
-        ),
-        Transition(
-            id="TRANS-004",
-            from_page_id="PAGE-04",
-            to_page_id="PAGE-05",
-            trigger_element_id="UI-015",
-            interaction_type="click",
-            action_label="Click Continue to Address Form",
-        ),
-        Transition(
-            id="TRANS-005",
-            from_page_id="PAGE-05",
-            to_page_id="PAGE-06",
-            trigger_element_id="UI-015",
-            interaction_type="click",
-            action_label="Click Continue to Shipping Method",
-        ),
-        Transition(
-            id="TRANS-006",
-            from_page_id="PAGE-06",
-            to_page_id="PAGE-07",
-            trigger_element_id="UI-016",
-            interaction_type="click",
-            action_label="Select Payment Method",
-        ),
-        Transition(
-            id="TRANS-007",
-            from_page_id="PAGE-07",
-            to_page_id="PAGE-08",
-            trigger_element_id="UI-017",
-            interaction_type="click",
-            action_label="Click Place Order Button",
-        ),
-    ]
-
-    @classmethod
-    def load_from_disk(cls, data_dir: Path = Path("./data")) -> dict[str, Any]:
-        """Load discovered or pre-captured pages, elements, and transitions."""
-        pages_file = data_dir / "pages.jsonl"
-        elements_file = data_dir / "elements.jsonl"
-        transitions_file = data_dir / "transitions.jsonl"
-
-        pages = []
-        if pages_file.exists():
-            with open(pages_file, encoding="utf-8") as f:
-                for line in f:
-                    if line.strip():
-                        pages.append(Page.model_validate_json(line))
-
-        elements = []
-        if elements_file.exists():
-            with open(elements_file, encoding="utf-8") as f:
-                for line in f:
-                    if line.strip():
-                        elements.append(UIElement.model_validate_json(line))
-
-        transitions = []
-        if transitions_file.exists():
-            with open(transitions_file, encoding="utf-8") as f:
-                for line in f:
-                    if line.strip():
-                        transitions.append(Transition.model_validate_json(line))
-        return {"pages": pages, "elements": elements, "transitions": transitions}
-
-
 class AutonomousCrawlerAgent:
     """
     Autonomous Browser Exploration Agent with bounded safety policies.
@@ -358,7 +55,6 @@ class AutonomousCrawlerAgent:
     MAX_PAGES = 25
     MAX_ACTIONS = 60
     MAX_DEPTH = 6
-    MAX_DEPTH = 4
     BLOCKED_VERBS = ["delete", "destroy", "remove", "logout", "log out", "sign out", "buy now", "purchase"]
 
     def __init__(
@@ -414,6 +110,19 @@ class AutonomousCrawlerAgent:
         return hashlib.md5(raw.encode()).hexdigest()[:8]
 
     @staticmethod
+    def _is_error_document(response_status: int | None, title: str) -> bool:
+        """Exclude server error documents from the observed product surface.
+
+        A navigation can succeed at the browser level while returning a 404
+        HTML page.  Treating that generic error page as application UI creates
+        false blast-radius paths, so error documents are evidence of a failed
+        navigation rather than discovered screens.
+        """
+        if response_status is not None and response_status >= 400:
+            return True
+        return title.strip().lower() in {"page not found", "page not found · github pages"}
+
+    @staticmethod
     def _normalise_navigation_url(url: str) -> str:
         """Remove fragments while preserving a meaningful route and query."""
         parsed = urlparse(url)
@@ -449,213 +158,10 @@ class AutonomousCrawlerAgent:
             capture_dom=capture_dom,
         )
 
-    async def _run_serverless_http_crawl(
-        self,
-        max_pages: int = 5,
-        max_actions: int = 15,
-        same_domain_only: bool = True,
-        capture_screenshots: bool = True,
-        capture_dom: bool = True,
-    ) -> tuple[list[Page], list[UIElement], list[Transition], dict[str, list[str]]]:
-        """Live HTTP crawler for serverless platforms like Vercel where Playwright binaries cannot be spawned."""
-        from urllib.parse import urljoin
-
-        import httpx
-        from bs4 import BeautifulSoup
-
-        pages: list[Page] = []
-        elements: list[UIElement] = []
-        transitions: list[Transition] = []
-        screen_graph: dict[str, list[str]] = {}
-        visited_urls: set[str] = set()
-
-        to_visit = [self._base_url]
-        base_host = urlparse(self._base_url).netloc or "web-app"
-
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            while to_visit and len(pages) < max_pages:
-                curr_url = to_visit.pop(0)
-                if not self._is_safe_url(curr_url):
-                    logger.warning("Skipping unsafe queued URL: %s", curr_url)
-                    continue
-                if curr_url in visited_urls:
-                    continue
-                visited_urls.add(curr_url)
-
-                try:
-                    resp = await client.get(curr_url)
-                    html = resp.text
-                    soup = BeautifulSoup(html, "html.parser")
-                    title = soup.title.string.strip() if soup.title and soup.title.string else f"{base_host} Page {len(pages) + 1}"
-                except Exception as err:
-                    logger.warning("HTTP fetch failed for %s: %s", curr_url, err)
-                    html = f"<html><head><title>{base_host}</title></head><body><h1>{base_host}</h1><p>URL: {curr_url}</p></body></html>"
-                    soup = BeautifulSoup(html, "html.parser")
-                    title = f"{base_host} Page {len(pages) + 1}"
-
-                page_id = f"PAGE-{len(pages) + 1:02d}"
-
-                # Extract interactive elements
-                page_els: list[UIElement] = []
-                for idx, btn in enumerate(soup.find_all(["button", "input"])):
-                    label = btn.get_text(strip=True) or btn.get("value") or btn.get("name") or f"Button {idx + 1}"
-                    page_els.append(UIElement(
-                        id=f"UI-{page_id}-{idx+1:02d}",
-                        page_id=page_id,
-                        element_type="button",
-                        selector=f"button:has-text('{label[:20]}')",
-                        label=label[:40],
-                    ))
-                for idx, link in enumerate(soup.find_all("a", href=True)):
-                    href = link["href"]
-                    label = link.get_text(strip=True) or href
-                    full_href = urljoin(curr_url, href)
-                    page_els.append(UIElement(
-                        id=f"UI-{page_id}-L{idx+1:02d}",
-                        page_id=page_id,
-                        element_type="link",
-                        selector=f"a[href='{href}']",
-                        label=label[:40],
-                    ))
-                    # Queue internal links
-                    link_host = urlparse(full_href).netloc
-                    if link_host == base_host and full_href not in visited_urls and len(to_visit) < 10:
-                        if full_href.startswith("http") and self._is_safe_url(full_href):
-                            to_visit.append(full_href)
-
-                shot_rel, dom_rel = self._generate_page_artifacts(
-                    Page(id=page_id, url=curr_url, title=title, flow_id=f"FLOW-{len(pages)+1:02d}", step_order=len(pages)+1),
-                    page_els
-                )
-
-                page_node = Page(
-                    id=page_id,
-                    url=curr_url,
-                    title=title,
-                    screenshot_path=shot_rel,
-                    dom_path=dom_rel,
-                    flow_id=f"FLOW-{len(pages)+1:02d}",
-                    step_order=len(pages)+1,
-                )
-                pages.append(page_node)
-                elements.extend(page_els)
-
-                self._emit("page_discovered", f"Discovered screen: {title} ({curr_url})", {
-                    "page_id": page_id, "url": curr_url, "title": title, "pages_count": len(pages),
-                })
-                self._emit("dom_captured", f"Captured DOM snapshot for {page_id}", {"page_id": page_id, "dom_path": dom_rel})
-                self._emit("screenshot_captured", f"Captured screenshot for {page_id}", {"page_id": page_id, "screenshot_path": shot_rel})
-
-                # Create transitions between sequential pages
-                if len(pages) > 1:
-                    prev_page = pages[-2]
-                    t = Transition(
-                        id=f"TRANS-{len(transitions)+1:03d}",
-                        from_page_id=prev_page.id,
-                        to_page_id=page_id,
-                        trigger_element_id=page_els[0].id if page_els else "UI-DEFAULT",
-                        interaction_type="click",
-                        action_label=page_els[0].label if page_els else "Navigate",
-                    )
-                    transitions.append(t)
-                    screen_graph.setdefault(prev_page.id, []).append(page_id)
-                    self._emit("transition_created", f"Transition created: {t.from_page_id} → {t.to_page_id}", {
-                        "transition_id": t.id, "from_page": t.from_page_id, "to_page": t.to_page_id, "action": t.action_label, "transitions_count": len(transitions)
-                    })
-
-        self._save_artifacts(pages, elements, transitions, screen_graph)
-        return pages, elements, transitions, screen_graph
-
     async def run_all_flows(self) -> tuple[list[Page], list[UIElement]]:
-        """Convenience method returning pages and elements."""
+        """Convenience method returning Playwright-observed pages and elements."""
         pages, elements, _, _ = await self.explore()
         return pages, elements
-
-    def _generate_page_artifacts(self, page: Page, page_elements: list[UIElement]) -> tuple[str, str]:
-        """Generate actual PNG screenshot and HTML DOM files on disk."""
-        screenshots_dir = self._session_artifacts_dir / "screenshots"
-        dom_dir = self._session_artifacts_dir / "dom"
-        screenshots_dir.mkdir(parents=True, exist_ok=True)
-        dom_dir.mkdir(parents=True, exist_ok=True)
-
-        shot_file = screenshots_dir / f"{page.id}.png"
-        dom_file = dom_dir / f"{page.id}.html"
-
-        # 1. Generate PNG screenshot using PIL
-        parsed_host = urlparse(page.url).netloc or urlparse(self._base_url).netloc or "Web Application"
-        try:
-            from PIL import Image, ImageDraw
-            img = Image.new("RGB", (1280, 800), color=(11, 17, 32))
-            draw = ImageDraw.Draw(img)
-            # Top bar
-            draw.rectangle([(0, 0), (1280, 55)], fill=(15, 25, 46))
-            draw.text((20, 16), f"{parsed_host} — {page.title}", fill=(241, 245, 249))
-            draw.text((20, 36), f"URL: {page.url} | ID: {page.id}", fill=(148, 163, 184))
-            # Page Body Card
-            draw.rectangle([(35, 80), (1245, 750)], fill=(15, 23, 42), outline=(51, 65, 85), width=2)
-            draw.text((65, 105), page.title, fill=(56, 189, 248))
-            draw.text((65, 130), f"Target Host: {parsed_host} | Discovered UI Elements: {len(page_elements)}", fill=(226, 232, 240))
-
-            y = 165
-            for el in page_elements[:9]:
-                draw.rectangle([(65, y), (1215, y + 48)], fill=(30, 41, 59), outline=(56, 189, 248), width=1)
-                draw.text((80, y + 8), f"[{el.element_type.upper()}] {el.label}", fill=(248, 250, 252))
-                draw.text((80, y + 26), f"Selector: {el.selector} | TestId: {el.data_test_id or '—'}", fill=(148, 163, 184))
-                y += 58
-
-            img.save(shot_file, format="PNG")
-            # Also save copy to main data/artifacts directory
-            (self._data_dir / "artifacts").mkdir(parents=True, exist_ok=True)
-            main_shot = self._data_dir / "artifacts" / f"{page.id}.png"
-            img.save(main_shot, format="PNG")
-        except Exception as err:
-            logger.warning("Could not generate PIL screenshot for %s: %s", page.id, err)
-
-        # 2. Generate actual DOM HTML snapshot
-        try:
-            elem_html_list = []
-            for el in page_elements:
-                elem_html_list.append(f"""
-                <div class="interactive-element" data-testid="{el.data_test_id or ''}" style="margin: 8px 0; padding: 10px; border: 1px solid #334155; border-radius: 4px; background: #0f172a;">
-                  <strong style="color: #f8fafc;">{el.label}</strong> (<span style="color: #38bdf8;">{el.element_type}</span>)
-                  <div style="font-family: monospace; font-size: 0.85em; color: #94a3b8; margin-top: 4px;">Selector: <code>{el.selector}</code></div>
-                </div>""")
-
-            dom_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>{page.title} - Captured DOM Snapshot</title>
-  <style>
-    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b1120; color: #e2e8f0; margin: 2rem; line-height: 1.5; }}
-    header {{ border-bottom: 2px solid #334155; padding-bottom: 1rem; margin-bottom: 1.5rem; }}
-    .card {{ background: #1e293b; padding: 1.5rem; border-radius: 8px; border: 1px solid #475569; }}
-    code {{ background: #090d16; padding: 2px 6px; border-radius: 4px; color: #38bdf8; font-family: monospace; }}
-  </style>
-</head>
-<body>
-  <header>
-    <h1>{page.title}</h1>
-    <p>Target URL: <a href="{page.url}" style="color: #38bdf8;">{page.url}</a> | Page ID: <code>{page.id}</code></p>
-  </header>
-  <main class="card">
-    <h2>Observed Interactive Elements ({len(page_elements)})</h2>
-    {"".join(elem_html_list)}
-  </main>
-</body>
-</html>"""
-            with open(dom_file, "w", encoding="utf-8") as f:
-                f.write(dom_content)
-
-            main_dom = self._data_dir / "artifacts" / f"{page.id}.html"
-            with open(main_dom, "w", encoding="utf-8") as f:
-                f.write(dom_content)
-        except Exception as err:
-            logger.warning("Could not write DOM snapshot for %s: %s", page.id, err)
-
-        relative_shot = f"artifacts/crawls/{self._session_id}/screenshots/{page.id}.png" if self._session_id != "default" else f"artifacts/{page.id}.png"
-        relative_dom = f"artifacts/crawls/{self._session_id}/dom/{page.id}.html" if self._session_id != "default" else f"artifacts/{page.id}.html"
-        return relative_shot, relative_dom
 
     async def _run_playwright_exploration(
         self,
@@ -704,7 +210,7 @@ class AutonomousCrawlerAgent:
                         })
 
                     try:
-                        await page.goto(target_url, timeout=20000, wait_until="domcontentloaded")
+                        response = await page.goto(target_url, timeout=20000, wait_until="domcontentloaded")
                         try:
                             await page.wait_for_load_state("networkidle", timeout=4000)
                         except Exception:
@@ -714,11 +220,20 @@ class AutonomousCrawlerAgent:
                         continue
 
                     current_url = self._normalise_navigation_url(page.url)
+                    title = (await page.title()).strip() or f"{urlparse(current_url).netloc} Page"
+                    response_status = response.status if response is not None else None
+                    if self._is_error_document(response_status, title):
+                        visited_urls.add(current_url)
+                        self._emit(
+                            "navigation_skipped",
+                            f"Skipped error document ({response_status or 'unknown'}): {current_url}",
+                            {"url": current_url, "status": response_status, "title": title},
+                        )
+                        continue
                     if not self._is_safe_url(current_url) or current_url in visited_urls:
                         continue
                     visited_urls.add(current_url)
 
-                    title = (await page.title()).strip() or f"{urlparse(current_url).netloc} Page"
                     page_id = f"PAGE-{len(pages) + 1:02d}"
                     extracted = await self._extract_elements(page, page_id)
                     dom_html = await page.content()

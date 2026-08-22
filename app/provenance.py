@@ -32,7 +32,7 @@ def build_run_manifest(
 ) -> Path:
     """Persist hashes for every run artifact referenced by the final report."""
     crawl_dir = data_dir / "artifacts" / "crawls" / crawl_id
-    evidence_files = [
+    core_evidence_files = [
         crawl_dir / "session.json",
         crawl_dir / "pages.jsonl",
         crawl_dir / "elements.jsonl",
@@ -45,6 +45,13 @@ def build_run_manifest(
         data_dir / f"pr_{repo.replace('/', '_').replace('-', '_').lower()}_{pr_number}_code_symbols.jsonl",
         report_path,
     ]
+    screenshot_files = sorted((crawl_dir / "screenshots").glob("*.png"))
+    dom_files = sorted((crawl_dir / "dom").glob("*.html"))
+    if not screenshot_files or not dom_files:
+        raise FileNotFoundError(
+            "Cannot certify a crawl without both screenshot and DOM artifacts."
+        )
+    evidence_files = [*core_evidence_files, *screenshot_files, *dom_files]
     missing = [str(path) for path in evidence_files if not path.is_file()]
     if missing:
         raise FileNotFoundError(f"Cannot certify incomplete run evidence: {', '.join(missing)}")

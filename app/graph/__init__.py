@@ -50,6 +50,9 @@ class GraphBuilder:
     """
 
     def __init__(self, uri: str, user: str, password: str) -> None:
+        # The Neo4j driver is imported lazily to keep API startup fail-closed
+        # when the optional database runtime is unavailable.
+        self._driver: Any = None
         try:
             from neo4j import GraphDatabase
 
@@ -71,6 +74,64 @@ class GraphBuilder:
     def close(self) -> None:
         if self._driver:
             self._driver.close()
+
+    @staticmethod
+    def _ui_code_mapping_score(element: UIElement, symbol: CodeSymbol) -> tuple[float, str]:
+        """Return a conservative, explainable UI-to-code mapping score."""
+        label_normalized = re.sub(r"[^a-z0-9]", "", element.label.lower())
+        label_words = {word for word in re.findall(r"[a-z0-9]+", element.label.lower()) if len(word) > 2}
+        label_terms = set(label_words)
+        if len(label_normalized) > 2:
+            label_terms.add(label_normalized)
+        symbol_normalized = re.sub(r"[^a-z0-9]", "", symbol.name.lower())
+        if not label_terms or not symbol_normalized:
+            return 0.0, "name_match"
+
+        name_overlap = sum(1 for word in label_words if word in symbol_normalized)
+        score = name_overlap / max(len(label_words), 1)
+        if len(label_normalized) >= 3 and (
+            label_normalized in symbol_normalized or symbol_normalized in label_normalized
+        ):
+            score = max(score, 0.8)
+        if score:
+            return score, "name_match"
+
+        path_words = set(re.findall(r"[a-z0-9]+", symbol.file_path.lower()))
+        path_words -= {"app", "component", "components", "core", "feature", "features", "page", "pages", "src", "ts"}
+        if "auth" in path_words:
+            path_words.update({"login", "signin", "signup", "register", "authentication"})
+        if label_terms & path_words:
+            return 0.55, "file_path_semantic_match"
+        return 0.0, "name_match"
+
+    @staticmethod
+    def _requirement_ui_coverage_score(requirement: Requirement, element: UIElement) -> float:
+        """Compute bounded semantic coverage without broad category leakage."""
+        category_keywords: dict[str, set[str]] = {
+            "product": {"product", "listing", "detail", "description", "image", "cart"},
+            "product_attributes": {"attribute", "dropdown", "swatch", "color", "size", "combobox", "search"},
+            "cart": {"cart", "basket", "quantity", "remove"},
+            "checkout": {"checkout", "address", "shipping", "payment", "order"},
+            "content": {"page", "content", "cms"},
+            "general": set(),
+        }
+        requirement_terms = set(re.findall(r"[a-z0-9]+", requirement.text.lower()))
+        requirement_terms |= category_keywords.get(requirement.category, set())
+        auth_terms = {"authentication", "authenticate", "login", "logout", "register", "signin", "signup"}
+        if requirement_terms & auth_terms:
+            requirement_terms |= auth_terms
+
+        label_normalized = re.sub(r"[^a-z0-9]", "", element.label.lower())
+        element_terms = {word for word in re.findall(r"[a-z0-9]+", element.label.lower()) if len(word) > 2}
+        if len(label_normalized) > 2:
+            element_terms.add(label_normalized)
+        if not element_terms:
+            return 0.0
+
+        overlap = len(requirement_terms & element_terms) / max(len(requirement_terms), 1)
+        if requirement_terms & auth_terms and element_terms & auth_terms:
+            overlap = max(overlap, 0.3)
+        return overlap
 
     # ─────────────────────────────────────────
     #  Schema Setup
@@ -96,6 +157,24 @@ class GraphBuilder:
                 except Exception as e:
                     logger.debug("Constraint already exists: %s", e)
         logger.info("Graph schema created")
+
+    def clear_active_evidence_graph(self) -> None:
+        """Replace the active, dedicated TraceGraph index before a rebuild.
+
+        Raw crawl/code/requirement artifacts are immutable files; Neo4j is the
+        query index for exactly one selected evidence run.  Clearing owned
+        labels prevents identical page IDs from separate crawls from creating
+        mixed-run report paths.
+        """
+        self._require_driver()
+        cypher = """
+        MATCH (n)
+        WHERE n:Requirement OR n:Page OR n:UIElement OR n:UserFlow
+           OR n:CodeFile OR n:CodeSymbol OR n:PullRequest OR n:PRChange
+        DETACH DELETE n
+        """
+        with self._driver.session() as session:
+            session.run(cypher)
 
     # ─────────────────────────────────────────
     #  Node Loaders
@@ -331,33 +410,12 @@ class GraphBuilder:
         """
         with self._driver.session() as session:
             for element in elements:
-                label_normalized = element.label.lower().replace(" ", "").replace("-", "")
-                label_words = {word for word in re.findall(r"[a-z0-9]+", element.label.lower()) if len(word) > 2}
-
                 best_sym: CodeSymbol | None = None
                 best_score = 0.0
                 best_method = "name_match"
 
                 for sym in symbols:
-                    sym_normalized = sym.name.replace("_", "").lower()
-                    # Overlap score: how much of the label appears in the component name
-                    words_in_label = [w.lower() for w in element.label.split() if len(w) > 3]
-                    overlap = sum(1 for w in words_in_label if w in sym_normalized)
-                    score = overlap / max(len(words_in_label), 1)
-
-                    # Boost for exact partial match
-                    if label_normalized in sym_normalized or sym_normalized in label_normalized:
-                        score = max(score, 0.8)
-
-                    method = "name_match"
-                    if score == 0:
-                        path_words = set(re.findall(r"[a-z0-9]+", sym.file_path.lower()))
-                        if "auth" in path_words:
-                            path_words.update({"login", "signin", "signup", "register", "authentication"})
-                        normalized_path_words = {word.replace(" ", "") for word in path_words}
-                        if label_words & path_words or any(word in label_normalized for word in normalized_path_words):
-                            score = 0.55
-                            method = "file_path_semantic_match"
+                    score, method = self._ui_code_mapping_score(element, sym)
 
                     if score > best_score:
                         best_score = score
@@ -393,39 +451,11 @@ class GraphBuilder:
             rel.matcher = $matcher
         """
 
-        # Keyword maps for category → element label keywords
-        CATEGORY_KEYWORDS: dict[str, list[str]] = {
-            "product": ["product", "listing", "detail", "description", "image", "add to cart"],
-            "product_attributes": [
-                "attribute",
-                "dropdown",
-                "swatch",
-                "color",
-                "size",
-                "combobox",
-                "search",
-            ],
-            "cart": ["cart", "basket", "quantity", "remove"],
-            "checkout": ["checkout", "address", "shipping", "payment", "order"],
-            "content": ["page", "content", "cms"],
-            "general": ["login", "sign in", "sign up", "register", "authentication", "article", "comment", "profile", "settings"],
-        }
-
         edges_created = 0
         with self._driver.session() as session:
             for req in requirements:
-                req_words = set(req.text.lower().split())
-                cat_kws = set(CATEGORY_KEYWORDS.get(req.category, []))
-                req_kws = req_words | cat_kws
-                req_normalized = re.sub(r"[^a-z0-9]", "", req.text.lower())
-
                 for elem in elements:
-                    elem_words = set(elem.label.lower().split())
-                    # Score = overlap
-                    overlap = len(req_kws & elem_words) / max(len(req_kws), 1)
-                    elem_normalized = re.sub(r"[^a-z0-9]", "", elem.label.lower())
-                    if any(term in req_normalized and term in elem_normalized for term in ("login", "signin", "signup", "register")):
-                        overlap = max(overlap, 0.3)
+                    overlap = self._requirement_ui_coverage_score(req, elem)
 
                     if overlap >= 0.1:
                         confidence = min(overlap * 2.0, 0.95)
@@ -461,7 +491,12 @@ class GraphBuilder:
         with self._driver.session() as session:
             for req in requirements:
                 result = session.run(check_cypher, req_id=req.id)
-                count = result.single()["covered_count"]
+                record = result.single()
+                if record is None:
+                    raise GraphUnavailableError(
+                        f"Coverage query returned no result for requirement '{req.id}'."
+                    )
+                count = int(record["covered_count"])
 
                 if count == 0:
                     # A bounded crawl never proves product-wide absence. Keep the
@@ -519,8 +554,7 @@ class GraphBuilder:
                 OPTIONAL MATCH (ui:UIElement)-[implementation:IMPLEMENTED_BY]->(sym)
                 OPTIONAL MATCH (ui)-[:PART_OF]->(page:Page)
                 OPTIONAL MATCH (page)-[:STEP_IN]->(flow:UserFlow)
-                OPTIONAL MATCH (flow)-[:REQUIRES]->(req:Requirement)
-                OPTIONAL MATCH (req)-[:COVERS]->(ui2:UIElement)
+                OPTIONAL MATCH (req:Requirement)-[:COVERS]->(ui)
                 RETURN
                     change.file_path AS file_path,
                     pr.number AS pr_number,
@@ -653,6 +687,7 @@ class GraphBuilder:
 
         logger.info("Building graph...")
 
+        self.clear_active_evidence_graph()
         self.create_schema()
 
         # Layer 1: Requirements

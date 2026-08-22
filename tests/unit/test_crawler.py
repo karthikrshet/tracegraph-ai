@@ -57,6 +57,12 @@ def test_state_fingerprint_deterministic():
     assert len(fp1) == 8
 
 
+def test_error_documents_are_not_treated_as_observed_product_screens():
+    assert AutonomousCrawlerAgent._is_error_document(404, "Conduit")
+    assert AutonomousCrawlerAgent._is_error_document(200, "Page not found · GitHub Pages")
+    assert not AutonomousCrawlerAgent._is_error_document(200, "Conduit")
+
+
 def test_select_next_action_prioritizes_high_value_elements():
     agent = AutonomousCrawlerAgent()
     elements = [
@@ -219,3 +225,14 @@ def test_crawl_configuration_defaults():
     assert config.capture_screenshots is True
     assert config.capture_dom is True
     assert config.autonomous is True
+
+
+def test_agent_limit_matches_documented_maximum_depth():
+    assert AutonomousCrawlerAgent.MAX_DEPTH == 6
+
+
+def test_pipeline_uses_a_unique_crawl_id_and_records_start_before_capture():
+    """The pipeline must not mix artifacts across executions of the same PR."""
+    pipeline_source = (Path(__file__).parents[2] / "scripts" / "run_pipeline.py").read_text(encoding="utf-8")
+    assert 'crawl_id = f"pipeline_{datetime.now(timezone.utc).strftime' in pipeline_source
+    assert "started_at=crawl_started_at" in pipeline_source

@@ -1,42 +1,45 @@
 # Evidence Run — RealWorld Angular PR #350
 
-This is the sample output for the selected narrow slice. It was produced from
-browser artifacts, a public README, an immutable GitHub PR revision, and a
-Neo4j traversal; it is not fixture output.
+This is the tracked, provenance-verified sample output for the selected narrow
+slice. It was generated on 2026-08-22 from a live browser crawl, the public
+README, an immutable GitHub PR revision, and a Neo4j traversal. It is not
+fixture or mock output.
 
 ## Inputs
 
-- Application: `https://angular.realworld.io/`
+- Application: `https://demo.realworld.show/`
 - Public specification: `https://raw.githubusercontent.com/realworld-apps/angular-realworld-example-app/main/README.md`
 - Repository: `realworld-apps/angular-realworld-example-app`
 - Pull request: [#350 — Secure auth flows and harden validation across the UI](https://github.com/realworld-apps/angular-realworld-example-app/pull/350)
-- Immutable head: `fc4380310755babb0d8c2021420d5b3e860b890c`
-- Crawl session: `cli_pr_350`
+- Immutable PR head: `fc4380310755babb0d8c2021420d5b3e860b890c`
+- Crawl session: `pipeline_20260822_124930_pr_350`
+- Evidence manifest: `data/run_manifests/pipeline_20260822_124930_pr_350_pr_350.json`
 
-## Observed evidence
+## Observed Evidence
 
 | Evidence | Count |
 | --- | ---: |
-| Pages/screens | 3 |
-| DOM snapshots | 3 |
-| PNG screenshots | 3 |
-| UI elements | 27 |
-| Transitions | 5 |
+| Live pages/screens | 5 |
+| DOM snapshots | 5 |
+| PNG screenshots | 5 |
+| UI elements | 96 |
+| Observed transitions | 4 |
 | Extracted requirements | 3 |
 | Changed code files | 7 |
 | Source symbols | 5 |
 
-The crawl captured the public home, `/login`, and `/register` screens. The
-graph contained 3 requirements, 3 pages, 27 UI elements, 1 observed flow, 7
-code files, 5 code symbols, 7 PR changes, and 1 pull request.
+The crawl visited the public home, sign-in, sign-up, profile, and article
+screens. The 21-entry manifest hashes every structured crawl artifact, each
+DOM snapshot, each screenshot, the requirements, GitHub PR artifacts, and the
+generated report. Verification found no missing or altered file.
 
-## Blast-radius result
+## Blast-Radius Result
 
-**Overall risk: LOW.** The system found 8 browser-observed UI links, one
-affected flow, and one requirement link. The lower confidence is intentional:
-the changed `AuthComponent` was mapped at **file scope** (the PR modifies an
-existing class rather than declaring a new symbol in its patch), and its links
-to Sign in/Sign up were found by a deterministic auth-path semantic heuristic.
+**Overall risk: LOW.** The graph found 16 browser-observed UI elements, one
+affected flow, and one requirement at risk. The paths are intentionally low
+confidence (about 49%): `AuthComponent` was connected to sign-in and sign-up
+controls through a deterministic auth-file semantic match, rather than a
+source-level selector or test-ID match.
 
 Verified path:
 
@@ -44,33 +47,41 @@ Verified path:
 PR #350
   → src/app/core/auth/auth.component.ts
   → AuthComponent (file_scope_fallback)
-  → Sign up on / (file_path_semantic_match)
-  → Observed crawl: angular.realworld.io
-  → REQ-001: login/signup authentication
+  → Sign in on / (file_path_semantic_match)
+  → Observed crawl: demo.realworld.show
+  → REQ-001: dedicated authentication screens
 ```
 
-QA should exercise public sign-in/sign-up navigation and form validation
-first, then have a human review the six remaining changed files that did not
-produce an end-to-end UI path. Two README requirements (article ownership and
-feed filtering) remained **UNVERIFIED** because this bounded crawl did not
-observe them; this is not reported as product-wide absence.
+### What QA Should Test First
 
-## Reproducibility
+1. Open the public **Sign in** and **Sign up** screens from home, profile, and
+   article pages; verify route navigation and form validation.
+2. Check the public article’s **Favorite Article** control, because the PR also
+   changes `article.component.ts` and the crawl observed this control.
+3. Manually triage the changed settings, JWT service, and authenticated
+   directive files that produced no high-confidence UI path in this bounded
+   public crawl.
 
-The generated run manifest at
-`data/run_manifests/cli_pr_350_pr_350.json` records SHA-256 digests for every
-referenced crawl artifact, requirements artifact, GitHub artifact, and report.
-Run the following after configuring the matching allowlists and Neo4j:
+### Requirements With Bounded-Crawl Gaps
+
+- `REQ-003` (author-only comment deletion) is **UNVERIFIED**, not absent. The
+  public crawl cannot authenticate as a comment author, so it cannot make a
+  claim about that conditional UI.
+
+## Reproduce
+
+Use a Playwright-capable Docker/worker deployment and configure the public
+allowlists, Neo4j, and a real LLM provider. The command fails without evidence;
+it does not substitute a report.
 
 ```powershell
 python scripts/run_pipeline.py `
   --repo realworld-apps/angular-realworld-example-app `
   --pr 350 `
-  --crawl-url https://angular.realworld.io/ `
+  --crawl-url https://demo.realworld.show/ `
   --spec-url https://raw.githubusercontent.com/realworld-apps/angular-realworld-example-app/main/README.md
 ```
 
-If GitHub rate-limits a subsequent run, `--reuse-verified-code` is explicit
-and only accepts persisted metadata with the exact immutable head SHA; it does
-not call a fake or generic fallback. `--reuse-crawl-id cli_pr_350` similarly
-requires a completed, URL-matching browser session.
+The run produces a new, timestamped crawl ID, so artifacts from prior runs
+cannot mix with the result. Neo4j is rebuilt as an active-run index, while the
+browser/code/requirement artifacts and their manifest remain immutable on disk.

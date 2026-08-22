@@ -91,7 +91,11 @@ async def _run(
         pages, elements, transitions, screen_graph = prior.pages, prior.elements, prior.transitions, prior.screen_graph
         console.print(f"Reusing completed browser crawl {crawl_id} with {len(pages)} pages.")
     else:
-        crawl_id = f"cli_pr_{pr_number}"
+        # A run identifier is immutable evidence, not a convenient display
+        # label.  Reusing ``cli_pr_<number>`` let artifacts from a previous
+        # execution survive alongside a new session record.
+        crawl_id = f"pipeline_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_pr_{pr_number}"
+        crawl_started_at = datetime.now(timezone.utc)
         crawler = AutonomousCrawlerAgent(
             base_url=crawl_url,
             data_dir=data_dir,
@@ -107,6 +111,7 @@ async def _run(
         crawl_session = CrawlSession(
             id=crawl_id,
             start_url=crawl_url,
+            started_at=crawl_started_at,
             status="COMPLETED",
             completed_at=datetime.now(timezone.utc),
             configuration=CrawlConfiguration(start_url=crawl_url, allowed_domains=settings.allowed_domains),

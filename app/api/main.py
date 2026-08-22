@@ -707,8 +707,8 @@ async def get_graph_visualize(pr_number: int, repo: str | None = None) -> dict[s
     changes = code_data.get("changes", [])
     code_symbols = code_data.get("code_symbols", [])
 
-    nodes = []
-    edges = []
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
 
     # PR node
     pr_id = f"pr-{pr_number}"
