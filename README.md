@@ -235,17 +235,20 @@ python scripts/run_pipeline.py `
 ### 6. Use the dashboard workflow
 
 1. Open [http://localhost:8000](http://localhost:8000).
-2. In **Web Crawler**, validate a public target, run a bounded crawl, and inspect
+2. Optionally select a **Verified public evaluation profile**, then click
+   **Fetch PR** to retrieve immutable GitHub code evidence. This reports only
+   changed-file/symbol counts; it is deliberately not a blast-radius claim.
+3. In **Web Crawler**, validate a public target, run a bounded crawl, and inspect
    the saved screenshots, downloaded DOM snapshots, and transitions.
-3. In **Specification**, enter either one approved public documentation URL or
+4. In **Specification**, enter either one approved public documentation URL or
    pasted requirement text, then ingest it. The dashboard never displays a seed
    requirements table on a first run.
-4. Select the same completed crawl and use **Apply to Graph**, then build the
+5. Select the same completed crawl and use **Apply to Graph**, then build the
    three-layer graph for the repository and PR.
-5. In **Blast Radius**, request the provenance-verified report. A graph,
+6. In **Blast Radius**, request the provenance-verified report. A graph,
    completed crawl, public spec, immutable GitHub evidence, and real LLM
    configuration are all required.
-6. In **QA Intelligence**, choose the completed crawl used by the report.
+7. In **QA Intelligence**, choose the completed crawl used by the report.
    The evidence verifier checks graph hops, stored DOM/screenshots, and observed
    transitions before producing reviewer-ready tests.
 

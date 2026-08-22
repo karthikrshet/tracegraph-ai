@@ -976,10 +976,10 @@ async function loadCrawlSessions() {
 function initPRControls() {
   const btnFetch = document.getElementById("btnFetchPR");
   if (btnFetch) {
-    btnFetch.addEventListener("click", () => {
+    btnFetch.addEventListener("click", async () => {
       const repo = document.getElementById("inputRepo").value.trim();
       const pr = parseInt(document.getElementById("inputPRNumber").value, 10);
-      runPRAnalysis(repo, pr);
+      await fetchPRCodeEvidence(repo, pr);
     });
   }
 
@@ -1068,6 +1068,65 @@ function initPRControls() {
         lucide.createIcons();
       }
     });
+  }
+}
+
+async function fetchPRCodeEvidence(repo, prNumber) {
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo) || !Number.isInteger(prNumber) || prNumber < 1) {
+    setAnalysisUnavailable("Enter a valid GitHub owner/repository and a positive pull-request number.");
+    document.getElementById("inputRepo")?.focus();
+    return;
+  }
+
+  const button = document.getElementById("btnFetchPR");
+  const headerRepo = document.getElementById("headerRepo");
+  const headerPR = document.getElementById("headerPR");
+  if (headerRepo) headerRepo.textContent = repo;
+  if (headerPR) headerPR.textContent = `#${prNumber}`;
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = "<i data-lucide='loader-circle'></i><span>Fetching…</span>";
+    lucide.createIcons();
+  }
+
+  try {
+    const response = await fetch("/api/analyze-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ repo, pr_number: prNumber }),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "GitHub PR retrieval failed.");
+
+    currentReport = null;
+    document.getElementById("prTitleDisplay").textContent = `PR #${prNumber} immutable code evidence retrieved`;
+    document.getElementById("prRiskBadge").textContent = "CODE READY";
+    document.getElementById("prRiskBadge").className = "badge badge-unverified";
+    document.getElementById("statFiles").textContent = String(data.changed_files ?? "—");
+    document.getElementById("statSymbols").textContent = String(data.code_symbols ?? "—");
+    document.getElementById("statUI").textContent = "—";
+    document.getElementById("statReqs").textContent = "—";
+    document.getElementById("llmEngineBadge").textContent = "GRAPH REQUIRED";
+    document.getElementById("llmEngineBadge").className = "badge badge-unverified";
+    document.getElementById("llmExecutiveSummary").textContent =
+      `Immutable GitHub evidence retrieved: ${data.changed_files} changed files and ${data.code_symbols} parsed symbols. ` +
+      "No blast-radius claim has been made. Complete the live crawl, requirement ingestion, and graph build next.";
+    document.getElementById("qaRecContent").textContent =
+      "Code evidence is ready. Build the graph from the matching completed crawl and ingested specification before requesting QA recommendations.";
+    setTableMessage("#tableImpactedUI tbody", 5, "No UI impact claim until a matching live crawl and graph are available.");
+    setTableMessage("#tableImpactedFlows tbody", 4, "No flow claim until a matching live crawl and graph are available.");
+    setTableMessage("#tableImpactedReqs tbody", 5, "No requirement-risk claim until a matching specification and graph are available.");
+    const evidence = document.getElementById("evidenceCardsList");
+    if (evidence) evidence.innerHTML = "<p class='text-muted'>PR code evidence is retrieved. Select the matching completed crawl and build the three-layer graph to establish evidence paths.</p>";
+  } catch (err) {
+    console.error("PR code retrieval failed", err);
+    setAnalysisUnavailable(`Could not retrieve immutable GitHub PR evidence: ${err.message}`);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = "<i data-lucide='search' class='icon-sm'></i><span>Fetch PR</span>";
+      lucide.createIcons();
+    }
   }
 }
 

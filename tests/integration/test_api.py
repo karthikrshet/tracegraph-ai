@@ -69,6 +69,25 @@ def test_example_profiles_are_real_configuration_only(client):
     assert "fills inputs only" in data["notice"].lower()
 
 
+def test_fetch_pr_code_evidence_is_available_before_graph_build(client, monkeypatch):
+    """Fetching a real PR is a useful first step, but is not a risk claim."""
+    from app.code_analyzer import CodeAnalyzer
+
+    async def fake_run(self, repo, pr_number):
+        assert repo == "marmelab/react-admin"
+        assert pr_number == 11339
+        return {"changes": [object(), object()], "code_symbols": [object()], "code_files": [object()]}
+
+    monkeypatch.setattr(CodeAnalyzer, "run", fake_run)
+    response = client.post(
+        "/api/analyze-code",
+        json={"repo": "marmelab/react-admin", "pr_number": 11339},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "pr_number": 11339, "changed_files": 2, "code_symbols": 1, "code_files": 1}
+
+
 def test_agent_contracts_are_exposed_without_claiming_runtime_success(client):
     """Agent metadata documents authority; it is not a fabricated execution result."""
     response = client.get("/api/agents")
