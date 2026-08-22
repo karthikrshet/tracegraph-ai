@@ -144,6 +144,19 @@ def test_requirements_do_not_use_coverage_from_a_different_source(client, monkey
     assert response.json()["requirements"][0]["coverage_status"] == "UNVERIFIED"
 
 
+def test_requirements_endpoint_returns_an_empty_collection_on_first_run(client, monkeypatch, tmp_path):
+    """A fresh deployment should not log a 404 just because nothing was ingested yet."""
+    import app.api.main as main_mod
+    from app.config import Settings
+
+    monkeypatch.setattr(main_mod, "get_settings", lambda: Settings(data_dir=tmp_path))
+
+    response = client.get("/api/requirements")
+
+    assert response.status_code == 200
+    assert response.json() == {"requirements": [], "count": 0}
+
+
 def test_crawl_session_reads_require_production_auth(client, monkeypatch):
     """Crawl metadata and artifacts must not be anonymously visible in production."""
     import app.api.main as main_mod

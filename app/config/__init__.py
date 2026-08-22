@@ -17,6 +17,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_DOCUMENT_HOSTS = ("github.com", "raw.githubusercontent.com")
 
 
+def _is_serverless_runtime_environment() -> bool:
+    """Detect a serverless function without relying on optional Vercel env exposure."""
+    return bool(os.environ.get("TRACEGRAPH_SERVERLESS") or os.environ.get("VERCEL"))
+
+
 def _parse_allowed_hosts(value: str) -> list[str]:
     """Return normalized hostnames from a comma-separated allowlist.
 
@@ -90,8 +95,8 @@ class Settings(BaseSettings):
     allow_custom_crawl_hosts: bool | None = None
 
     # ── Paths ────────────────────────────────
-    data_dir: Path = Path(os.environ.get("DATA_DIR", "/tmp/data" if os.environ.get("VERCEL") else "./data"))
-    artifacts_dir: Path = Path(os.environ.get("ARTIFACTS_DIR", "/tmp/data/artifacts" if os.environ.get("VERCEL") else "./data/artifacts"))
+    data_dir: Path = Path(os.environ.get("DATA_DIR", "/tmp/data" if _is_serverless_runtime_environment() else "./data"))
+    artifacts_dir: Path = Path(os.environ.get("ARTIFACTS_DIR", "/tmp/data/artifacts" if _is_serverless_runtime_environment() else "./data/artifacts"))
 
     # ── Logging ──────────────────────────────
     log_level: str = "INFO"
@@ -146,7 +151,7 @@ class Settings(BaseSettings):
         it cannot safely own a long-lived Playwright browser, persist an SSE
         stream, or retain an in-memory crawl session after the response.
         """
-        return bool(os.environ.get("VERCEL"))
+        return _is_serverless_runtime_environment()
 
     @property
     def custom_crawl_hosts_enabled(self) -> bool:

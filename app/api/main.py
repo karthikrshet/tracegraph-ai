@@ -664,7 +664,10 @@ async def get_requirements() -> dict[str, Any]:
     settings = get_settings()
     requirements = RequirementIngestor.load_from_disk(settings.data_dir)
     if not requirements:
-        raise HTTPException(status_code=404, detail="No ingested requirements are available.")
+        # An empty collection is a normal first-run state. Returning 200 lets
+        # the dashboard render its explicit empty state without generating
+        # noisy 404s in deployment logs.
+        return {"requirements": [], "count": 0}
 
     # Ingestion persists requirements as UNVERIFIED.  Once a graph has been
     # built, take the coverage state from Neo4j, but only if its source matches
