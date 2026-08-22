@@ -71,6 +71,33 @@ python scripts/run_pipeline.py \
   --spec-url https://docs.example.com/feature
 ```
 
+### Windows / Docker Desktop
+
+The live pipeline needs Docker Desktop's **Linux** engine for Neo4j. Before
+running Compose, start Docker Desktop from the Start menu and wait until it
+reports **Engine running**. If `docker version` does not show both `Client` and
+`Server`, Docker Desktop is stopped, still starting, or configured for Windows
+containers; switch it to Linux containers before continuing.
+
+In Windows Command Prompt, put the pipeline command on **one line** (a trailing
+`\` is a Bash continuation character and does not work in `cmd.exe`):
+
+```cmd
+docker compose up -d neo4j
+docker compose ps
+python scripts/run_pipeline.py --repo realworld-apps/angular-realworld-example-app --pr 350 --crawl-url https://demo.realworld.show/ --spec-url https://raw.githubusercontent.com/realworld-apps/angular-realworld-example-app/main/README.md
+```
+
+In PowerShell, use a backtick for a multi-line command:
+
+```powershell
+python scripts/run_pipeline.py `
+  --repo realworld-apps/angular-realworld-example-app `
+  --pr 350 `
+  --crawl-url https://demo.realworld.show/ `
+  --spec-url https://raw.githubusercontent.com/realworld-apps/angular-realworld-example-app/main/README.md
+```
+
 The command exits without a report if any evidence source is unavailable. A successful run writes `data/blast_radius_pr_<number>.json` and Markdown alongside the raw, run-specific crawl/code artifacts.
 
 To use the dashboard:
