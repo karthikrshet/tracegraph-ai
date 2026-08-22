@@ -221,3 +221,25 @@ def test_fallback_summary_groups_repeated_controls_by_visible_label(tmp_path):
 
     assert "**2 browser-observed selector instance(s)** across **1 distinct UI control(s)**" in summary
     assert "Product Attribute Dropdown` (2 observed selectors)" in summary
+
+
+def test_recommendation_mentions_human_triage_only_for_unmapped_files(tmp_path):
+    analyzer = PRAnalyzer(graph=make_mock_graph([]), llm=MockLLMProvider(), data_dir=tmp_path)
+    flow = analyzer._aggregate_flow_impacts(SAMPLE_PATHS)
+    reqs = analyzer._aggregate_req_impacts(SAMPLE_PATHS)
+
+    mapped = analyzer._deterministic_recommendation(
+        changed_files=["src/components/Attributes/DropdownRow.tsx"],
+        raw_paths=SAMPLE_PATHS,
+        flow_impacts=flow,
+        req_impacts=reqs,
+    )
+    unmapped = analyzer._deterministic_recommendation(
+        changed_files=["src/components/Attributes/DropdownRow.tsx", "src/core/auth.ts"],
+        raw_paths=SAMPLE_PATHS,
+        flow_impacts=flow,
+        req_impacts=reqs,
+    )
+
+    assert "human triage" not in mapped
+    assert "1 changed file lacks a verified UI mapping" in unmapped

@@ -171,11 +171,11 @@ class PRAnalyzer:
         summary = self._fallback_summary(
             pr_number, pr_title, changed_files, ui_impacts, flow_impacts, req_impacts
         )
-        primary_flow = flow_impacts[0].label if flow_impacts else "the observed crawl"
-        primary_req = req_impacts[0].item_id if req_impacts else "unmapped changes"
-        recommendation = (
-            f"QA should review {primary_flow}, then validate the evidence chain for {primary_req}; "
-            "unmapped files require human triage before release."
+        recommendation = self._deterministic_recommendation(
+            changed_files=changed_files,
+            raw_paths=raw_paths,
+            flow_impacts=flow_impacts,
+            req_impacts=req_impacts,
         )
 
         report = BlastRadiusReport(
@@ -243,6 +243,47 @@ class PRAnalyzer:
                 ],
             )
         return list(seen.values())
+
+    @staticmethod
+    def _deterministic_recommendation(
+        *,
+        changed_files: list[str],
+        raw_paths: list[dict[str, Any]],
+        flow_impacts: list[ImpactedItem],
+        req_impacts: list[ImpactedItem],
+    ) -> str:
+        """Render a QA action only from the current graph traversal facts.
+
+        This is intentionally a deterministic recommendation, not an LLM
+        completion.  It must never claim that a file is unmapped unless the
+        PR traversal contains that changed file without a verified UI element.
+        """
+        mapped_files = {
+            str(row["file_path"])
+            for row in raw_paths
+            if row.get("file_path") and row.get("ui_element_id")
+        }
+        unmapped_files = [path for path in changed_files if path not in mapped_files]
+
+        if flow_impacts and req_impacts:
+            action = (
+                f"QA should review {flow_impacts[0].label} and validate the graph-backed "
+                f"evidence chain for {req_impacts[0].item_id}."
+            )
+        elif flow_impacts:
+            action = f"QA should review the graph-backed flow {flow_impacts[0].label}."
+        elif req_impacts:
+            action = f"QA should validate the graph-backed evidence chain for {req_impacts[0].item_id}."
+        else:
+            action = "No browser-observed UI impact was verified for this PR."
+
+        if unmapped_files:
+            if len(unmapped_files) == 1:
+                action += " 1 changed file lacks a verified UI mapping and requires human triage before release."
+            else:
+                action += f" {len(unmapped_files)} changed files lack verified UI mappings and require human triage before release."
+
+        return action
 
     def _aggregate_flow_impacts(self, raw_paths: list[dict[str, Any]]) -> list[ImpactedItem]:
         seen: dict[str, ImpactedItem] = {}

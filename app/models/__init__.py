@@ -271,5 +271,5 @@ class BlastRadiusReport(BaseModel):
     impacted_requirements: list[ImpactedItem]
     absent_requirements: list[str]  # requirements with no UI coverage that PR may affect
     summary: str = ""  # LLM-generated human-readable summary
-    recommendation: str = ""  # LLM-generated QA recommendation
+    recommendation: str = ""  # Deterministic action derived from graph evidence
     metrics: dict[str, Any] = Field(default_factory=dict)
