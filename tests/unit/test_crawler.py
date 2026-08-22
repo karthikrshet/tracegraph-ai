@@ -182,6 +182,35 @@ def test_crawl_session_history_normalises_legacy_naive_timestamps(tmp_path: Path
     assert sessions[0].started_at.tzinfo is not None
 
 
+def test_timed_out_crawl_keeps_emitted_screens_and_transitions(tmp_path: Path):
+    """Partial browser evidence remains inspectable after the worker times out."""
+    from app.crawler.session_manager import CrawlConfiguration, CrawlSessionManager
+
+    manager = CrawlSessionManager(data_dir=tmp_path)
+    session = manager.create_session(CrawlConfiguration(crawl_id="partial", start_url="https://example.com"))
+    session.events = [
+        {
+            "type": "page_discovered",
+            "data": {"page_id": "PAGE-01", "url": "https://example.com", "title": "Home"},
+        },
+        {
+            "type": "page_discovered",
+            "data": {"page_id": "PAGE-02", "url": "https://example.com/docs", "title": "Docs"},
+        },
+        {
+            "type": "transition_created",
+            "data": {"transition_id": "TRANS-001", "from_page": "PAGE-01", "to_page": "PAGE-02", "action": "Docs"},
+        },
+    ]
+    session.status = "TIMEOUT"
+
+    manager.recover_partial_artifacts(session)
+
+    assert [page.id for page in session.pages] == ["PAGE-01", "PAGE-02"]
+    assert [transition.id for transition in session.transitions] == ["TRANS-001"]
+    assert session.screen_graph == {"PAGE-01": ["PAGE-02"]}
+
+
 def test_crawl_configuration_defaults():
     from app.crawler.session_manager import CrawlConfiguration
 

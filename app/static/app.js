@@ -333,7 +333,7 @@ async function startAutonomousCrawl() {
         max_depth: maxDepth,
         max_actions: maxActions,
         max_states: maxStates,
-        max_runtime_seconds: 300,
+        max_runtime_seconds: 600,
         same_domain_only: sameDomainOnly,
         capture_dom: captureDom,
         capture_screenshots: captureScreenshots,

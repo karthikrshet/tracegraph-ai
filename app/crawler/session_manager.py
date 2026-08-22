@@ -116,7 +116,68 @@ class CrawlSessionManager:
     def get_session(self, crawl_id: str) -> CrawlSession | None:
         return self._sessions.get(crawl_id)
 
+    def recover_partial_artifacts(self, session: CrawlSession) -> CrawlSession:
+        """Recover pages/transitions emitted before a timeout or cancellation.
+
+        A browser task can be cancelled by ``asyncio.wait_for`` before its
+        final return value is assigned to the session.  The screenshots and
+        DOM files were already captured at that point, so the event ledger is
+        authoritative evidence and must remain viewable rather than appearing
+        as a misleading "0 Screens Captured" result.
+        """
+        known_pages = {page.id for page in session.pages}
+        known_transitions = {transition.id for transition in session.transitions}
+        for event in session.events:
+            data = event.get("data", {})
+            if not isinstance(data, dict):
+                continue
+            if event.get("type") == "page_discovered":
+                page_id = str(data.get("page_id", ""))
+                url = str(data.get("url", ""))
+                if not page_id or not url or page_id in known_pages:
+                    continue
+                session.pages.append(
+                    Page(
+                        id=page_id,
+                        url=url,
+                        title=str(data.get("title", "Captured page")),
+                        screenshot_path=(
+                            f"artifacts/crawls/{session.id}/screenshots/{page_id}.png"
+                            if session.configuration.capture_screenshots
+                            else ""
+                        ),
+                        dom_path=(
+                            f"artifacts/crawls/{session.id}/dom/{page_id}.html"
+                            if session.configuration.capture_dom
+                            else ""
+                        ),
+                        flow_id="FLOW-01",
+                        step_order=len(session.pages) + 1,
+                    )
+                )
+                known_pages.add(page_id)
+            elif event.get("type") == "transition_created":
+                transition_id = str(data.get("transition_id", ""))
+                from_page = str(data.get("from_page", ""))
+                to_page = str(data.get("to_page", ""))
+                if not transition_id or not from_page or not to_page or transition_id in known_transitions:
+                    continue
+                session.transitions.append(
+                    Transition(
+                        id=transition_id,
+                        from_page_id=from_page,
+                        to_page_id=to_page,
+                        interaction_type="navigation",
+                        action_label=str(data.get("action", "Observed navigation")),
+                    )
+                )
+                session.screen_graph.setdefault(from_page, []).append(to_page)
+                known_transitions.add(transition_id)
+        return session
+
     def list_sessions(self) -> list[CrawlSession]:
+        for session in self._sessions.values():
+            self.recover_partial_artifacts(session)
         return sorted(self._sessions.values(), key=lambda s: s.started_at, reverse=True)
 
     def create_session(self, config: CrawlConfiguration) -> CrawlSession:
@@ -294,8 +355,13 @@ class CrawlSessionManager:
                 session.actions_executed = data["actions_count"]
             if "transitions_count" in data:
                 session.transitions_discovered = data["transitions_count"]
-
         self.emit_event(crawl_id, event_type, message, data)
+        if session and event_type == "page_discovered":
+            self.recover_partial_artifacts(session)
+        # Persist incremental progress so an interrupted serverless worker
+        # still has a browsable evidence ledger and artifact index.
+        if session and event_type in {"page_discovered", "transition_created"}:
+            self._save_session_metadata(session)
 
     def _save_session_metadata(self, session: CrawlSession) -> None:
         """Persist session summary to disk."""

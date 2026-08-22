@@ -355,6 +355,7 @@ async def get_crawl_pages(crawl_id: str) -> dict[str, Any]:
     session = manager.get_session(crawl_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Crawl session '{crawl_id}' not found")
+    manager.recover_partial_artifacts(session)
     return {"pages": [p.model_dump(mode="json") for p in session.pages], "count": len(session.pages)}
 
 
