@@ -19,10 +19,12 @@ def client(monkeypatch):
     import app.api.main as main_mod
     from app.graph import GraphUnavailableError
     from app.ingestor import RequirementIngestor
-    from app.llm import MockLLMProvider
     from app.models import Requirement
 
-    monkeypatch.setattr(main_mod, "get_llm_provider", lambda *args, **kwargs: MockLLMProvider())
+    class TestLLM:
+        """Non-network test double; ingestion itself is stubbed below."""
+
+    monkeypatch.setattr(main_mod, "get_llm_provider", lambda *args, **kwargs: TestLLM())
 
     class UnavailableGraph:
         def cypher_query(self, *_args, **_kwargs):
@@ -93,6 +95,26 @@ def test_ingest_endpoint(client):
     assert data["status"] == "ok"
     assert data["requirements_ingested"] == 1
     assert data["categories"] == ["product"]
+
+
+def test_ingest_rejects_mock_provider(client, monkeypatch):
+    """The API must not turn a mock provider into apparent product evidence."""
+    import app.api.main as main_mod
+    from app.llm import MockLLMProvider
+
+    monkeypatch.setattr(main_mod, "get_llm_provider", lambda *args, **kwargs: MockLLMProvider())
+    response = client.post("/api/ingest", json={"source_urls": ["https://docs.saleor.io/developer/products"]})
+    assert response.status_code == 503
+
+
+def test_crawl_session_reads_require_production_auth(client, monkeypatch):
+    """Crawl metadata and artifacts must not be anonymously visible in production."""
+    import app.api.main as main_mod
+    from app.config import Settings
+
+    monkeypatch.setattr(main_mod, "get_settings", lambda: Settings(app_env="production", api_bearer_token="test-token"))
+    response = client.get("/api/crawl/sessions")
+    assert response.status_code == 401
 
 
 def test_get_report_json_rejects_archived_unverified_report(client):

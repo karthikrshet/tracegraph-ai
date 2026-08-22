@@ -443,8 +443,11 @@ class GraphBuilder:
 
     def run_absence_detection(self, requirements: list[Requirement]) -> None:
         """
-        Mark requirements that have no COVERS edge as ABSENT or UNVERIFIED.
-        Creates ABSENT edges to the closest UserFlow.
+        Mark requirements that have no COVERS edge as UNVERIFIED.
+
+        A bounded crawl cannot prove product-wide absence, so this method uses
+        an explicit coverage-status property rather than creating an ABSENT
+        relationship that would imply a false graph fact.
         """
         check_cypher = """
         MATCH (r:Requirement {id: $req_id})
@@ -537,6 +540,7 @@ class GraphBuilder:
                     flow.name AS flow_name,
                     req.id AS req_id,
                     req.text AS req_text,
+                    req.category AS req_category,
                     req.testability_score AS req_testability,
                     req.coverage_status AS req_coverage_status
                 ORDER BY req.id, flow.id, ui.id
@@ -558,9 +562,8 @@ class GraphBuilder:
                 cypher = """
                 MATCH (r:Requirement)
                 WHERE r.coverage_status IN ['ABSENT', 'UNVERIFIED']
-                OPTIONAL MATCH (r)-[:ABSENT]->(f:UserFlow)
                 RETURN r.id AS id, r.text AS text, r.category AS category,
-                       r.coverage_status AS status, f.name AS closest_flow
+                       r.coverage_status AS status, null AS closest_flow
                 ORDER BY r.id
                 """
                 with self._driver.session() as session:

@@ -770,6 +770,17 @@ function setTableMessage(selector, columnCount, message) {
   if (tbody) tbody.innerHTML = `<tr><td colspan="${columnCount}" class="text-muted">${escapeHtml(message)}</td></tr>`;
 }
 
+function riskBadge(risk) {
+  const normalized = String(risk || "UNASSESSED").toUpperCase();
+  const styles = {
+    HIGH: ["badge-risk-high", "HIGH"],
+    MEDIUM: ["badge-warning", "MEDIUM"],
+    LOW: ["badge-success", "LOW"],
+  };
+  const [className, label] = styles[normalized] || ["badge-unverified", "UNASSESSED"];
+  return `<span class="badge ${className}">${label}</span>`;
+}
+
 function setAnalysisUnavailable(reason) {
   currentReport = null;
   document.getElementById("prTitleDisplay").innerText = "Evidence graph not ready";
@@ -821,13 +832,10 @@ function renderBlastRadiusReport(report) {
   uiTbody.innerHTML = "";
   (report.impacted_ui_elements || []).forEach(item => {
     const row = document.createElement("tr");
-    const riskBadge = item.risk_level === "HIGH" 
-      ? '<span class="badge badge-risk-high">🔴 HIGH</span>' 
-      : '<span class="badge badge-warning">🟡 MEDIUM</span>';
     row.innerHTML = `
       <td><strong>${escapeHtml(item.label)}</strong></td>
       <td><code>${escapeHtml(item.element_type || "UIElement")}</code></td>
-      <td>${riskBadge}</td>
+      <td>${riskBadge(item.risk_level)}</td>
       <td><code>${(item.confidence * 100).toFixed(0)}%</code></td>
       <td><small>${escapeHtml((item.evidence_chain || []).slice(-2).join(" → ") || "PR change traversal")}</small></td>
     `;
@@ -843,7 +851,7 @@ function renderBlastRadiusReport(report) {
     row.innerHTML = `
       <td><code>${escapeHtml(item.item_id)}</code></td>
       <td><strong>${escapeHtml(item.label)}</strong></td>
-      <td><span class="badge badge-risk-high">🔴 HIGH</span></td>
+      <td>${riskBadge(item.risk_level)}</td>
       <td><code>${(item.confidence * 100).toFixed(0)}%</code></td>
     `;
     flowTbody.appendChild(row);
@@ -855,15 +863,12 @@ function renderBlastRadiusReport(report) {
   reqTbody.innerHTML = "";
   (report.impacted_requirements || []).forEach(item => {
     const row = document.createElement("tr");
-    const riskBadge = item.risk_level === "HIGH" 
-      ? '<span class="badge badge-risk-high">HIGH</span>' 
-      : '<span class="badge badge-warning">MEDIUM</span>';
     row.innerHTML = `
       <td><code>${escapeHtml(item.item_id)}</code></td>
       <td>${escapeHtml(item.label)}</td>
-      <td><span class="badge badge-partial">${escapeHtml(item.category || "product_attributes")}</span></td>
+      <td><span class="badge badge-partial">${escapeHtml(item.category || "general")}</span></td>
       <td><code>${(item.confidence * 100).toFixed(0)}%</code></td>
-      <td>${riskBadge}</td>
+      <td>${riskBadge(item.risk_level)}</td>
     `;
     reqTbody.appendChild(row);
   });

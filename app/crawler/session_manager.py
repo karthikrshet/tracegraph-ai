@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
@@ -35,7 +35,7 @@ class CrawlConfiguration(BaseModel):
 
 
 class CrawlEvent(BaseModel):
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     type: str  # page_discovered, action_selected, transition_created, etc.
     message: str = ""
     data: dict[str, Any] = Field(default_factory=dict)
@@ -44,7 +44,7 @@ class CrawlEvent(BaseModel):
 class CrawlSession(BaseModel):
     id: str
     start_url: str
-    started_at: datetime = Field(default_factory=datetime.utcnow)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
     status: str = "QUEUED"  # QUEUED, RUNNING, PAUSED, COMPLETED, FAILED, CANCELLED, TIMEOUT
     configuration: CrawlConfiguration
@@ -107,7 +107,7 @@ class CrawlSessionManager:
         return sorted(self._sessions.values(), key=lambda s: s.started_at, reverse=True)
 
     def create_session(self, config: CrawlConfiguration) -> CrawlSession:
-        crawl_id = config.crawl_id or f"crawl_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        crawl_id = config.crawl_id or f"crawl_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
         config.crawl_id = crawl_id
         session_dir = self._data_dir / "artifacts" / "crawls" / crawl_id
         session_dir.mkdir(parents=True, exist_ok=True)
@@ -129,7 +129,7 @@ class CrawlSessionManager:
     def emit_event(self, crawl_id: str, event_type: str, message: str, data: dict[str, Any] | None = None) -> None:
         session = self._sessions.get(crawl_id)
         evt_dict = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": event_type,
             "message": message,
             "data": data or {},
@@ -155,7 +155,7 @@ class CrawlSessionManager:
         session = self._sessions.get(crawl_id)
         if session:
             init_evt = {
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "type": "session_init",
                 "message": f"Connected to crawl {crawl_id}",
                 "data": {
@@ -191,7 +191,7 @@ class CrawlSessionManager:
         if task and not task.done():
             task.cancel()
         session.status = "CANCELLED"
-        session.completed_at = datetime.utcnow()
+        session.completed_at = datetime.now(timezone.utc)
         self.emit_event(crawl_id, "crawl_cancelled", "Crawl cancelled by user request")
         self._save_session_metadata(session)
         return True
@@ -201,7 +201,7 @@ class CrawlSessionManager:
         crawl_id = session.id
         config = session.configuration
         session.status = "RUNNING"
-        session.started_at = datetime.utcnow()
+        session.started_at = datetime.now(timezone.utc)
         self.emit_event(crawl_id, "crawl_started", f"Started autonomous crawl on {config.start_url}")
 
         from app.crawler import AutonomousCrawlerAgent
@@ -234,7 +234,7 @@ class CrawlSessionManager:
             session.states_discovered = len(pages)
             session.actions_executed = len(transitions)
             session.status = "COMPLETED"
-            session.completed_at = datetime.utcnow()
+            session.completed_at = datetime.now(timezone.utc)
 
             self.emit_event(
                 crawl_id,
@@ -249,17 +249,17 @@ class CrawlSessionManager:
             )
         except asyncio.TimeoutError:
             session.status = "TIMEOUT"
-            session.completed_at = datetime.utcnow()
+            session.completed_at = datetime.now(timezone.utc)
             session.error = f"Exceeded maximum runtime of {config.max_runtime_seconds} seconds"
             self.emit_event(crawl_id, "crawl_timeout", session.error)
         except asyncio.CancelledError:
             session.status = "CANCELLED"
-            session.completed_at = datetime.utcnow()
+            session.completed_at = datetime.now(timezone.utc)
             self.emit_event(crawl_id, "crawl_cancelled", "Crawl cancelled")
         except Exception as e:
             logger.exception("Crawl execution error for %s: %s", crawl_id, e)
             session.status = "FAILED"
-            session.completed_at = datetime.utcnow()
+            session.completed_at = datetime.now(timezone.utc)
             session.error = str(e)
             self.emit_event(crawl_id, "crawl_failed", f"Crawl failed: {e}", {"error": str(e)})
         finally:

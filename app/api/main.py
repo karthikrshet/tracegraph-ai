@@ -33,7 +33,7 @@ from app.crawler.security import validate_crawl_url
 from app.crawler.session_manager import CrawlConfiguration, CrawlSessionManager
 from app.graph import GraphBuilder, GraphUnavailableError
 from app.ingestor import RequirementIngestor
-from app.llm import get_llm_provider
+from app.llm import MockLLMProvider, get_llm_provider
 from app.models import UserFlow
 from app.pr_analyzer import PRAnalyzer
 
@@ -109,6 +109,17 @@ def get_data_dir() -> Path:
     return get_settings().data_dir
 
 
+def require_real_llm() -> Any:
+    """Return a configured provider or fail instead of fabricating production output."""
+    provider = get_llm_provider(get_settings())
+    if isinstance(provider, MockLLMProvider):
+        raise HTTPException(
+            status_code=503,
+            detail="A real LLM provider key is required for specification extraction and report narration.",
+        )
+    return provider
+
+
 # ─────────────────────────────────────────────
 #  Request/Response Models
 # ─────────────────────────────────────────────
@@ -167,7 +178,7 @@ async def health() -> dict[str, str]:
 async def ingest_requirements(req: IngestRequest) -> dict[str, Any]:
     """Ingest product documentation → extract Requirements."""
     settings = get_settings()
-    llm = get_llm_provider(settings)
+    llm = require_real_llm()
     ingestor = RequirementIngestor(llm=llm, data_dir=settings.data_dir)
 
     requirements = await ingestor.run(source_urls=req.source_urls, source_text=req.source_text)
@@ -281,7 +292,7 @@ async def start_crawl(req: CrawlStartRequest) -> dict[str, Any]:
     }
 
 
-@app.get("/api/crawl/sessions")
+@app.get("/api/crawl/sessions", dependencies=[Depends(require_api_auth)])
 async def list_crawl_sessions() -> dict[str, Any]:
     """List all past and active crawl sessions."""
     settings = get_settings()
@@ -294,7 +305,7 @@ async def list_crawl_sessions() -> dict[str, Any]:
     }
 
 
-@app.get("/api/crawl/{crawl_id}")
+@app.get("/api/crawl/{crawl_id}", dependencies=[Depends(require_api_auth)])
 async def get_crawl_status(crawl_id: str) -> dict[str, Any]:
     """Get live status, metrics, and progress for a specific crawl session."""
     settings = get_settings()
@@ -305,7 +316,7 @@ async def get_crawl_status(crawl_id: str) -> dict[str, Any]:
     return session.model_dump(mode="json")
 
 
-@app.get("/api/crawl/{crawl_id}/events")
+@app.get("/api/crawl/{crawl_id}/events", dependencies=[Depends(require_api_auth)])
 async def stream_crawl_events(crawl_id: str) -> StreamingResponse:
     """Stream real-time crawl execution events via Server-Sent Events (SSE)."""
     settings = get_settings()
@@ -336,7 +347,7 @@ async def cancel_crawl(crawl_id: str) -> dict[str, Any]:
     return {"status": "ok", "message": f"Crawl session '{crawl_id}' cancelled"}
 
 
-@app.get("/api/crawl/{crawl_id}/pages")
+@app.get("/api/crawl/{crawl_id}/pages", dependencies=[Depends(require_api_auth)])
 async def get_crawl_pages(crawl_id: str) -> dict[str, Any]:
     """Get discovered pages for a crawl session."""
     settings = get_settings()
@@ -347,7 +358,7 @@ async def get_crawl_pages(crawl_id: str) -> dict[str, Any]:
     return {"pages": [p.model_dump(mode="json") for p in session.pages], "count": len(session.pages)}
 
 
-@app.get("/api/crawl/{crawl_id}/transitions")
+@app.get("/api/crawl/{crawl_id}/transitions", dependencies=[Depends(require_api_auth)])
 async def get_crawl_transitions(crawl_id: str) -> dict[str, Any]:
     """Get discovered transitions and screen graph for a crawl session."""
     settings = get_settings()
@@ -362,7 +373,7 @@ async def get_crawl_transitions(crawl_id: str) -> dict[str, Any]:
     }
 
 
-@app.get("/api/crawl/{crawl_id}/artifacts/{artifact_type}/{filename}")
+@app.get("/api/crawl/{crawl_id}/artifacts/{artifact_type}/{filename}", dependencies=[Depends(require_api_auth)])
 async def get_crawl_artifact(crawl_id: str, artifact_type: str, filename: str) -> Any:
     """Safely serve crawl artifact (screenshot or DOM HTML) with path-traversal prevention."""
     if artifact_type not in ("screenshots", "dom"):
@@ -521,7 +532,7 @@ async def analyze_pr(
         raise HTTPException(status_code=409, detail="Build the graph for this repository, PR, and crawl before requesting a report.")
 
     graph = get_graph()
-    llm = get_llm_provider(settings)
+    llm = require_real_llm()
     try:
         if not graph.available:
             raise HTTPException(status_code=503, detail="Neo4j is unavailable; refusing to produce an ungrounded report.")
@@ -642,7 +653,7 @@ async def get_requirements() -> dict[str, Any]:
 
 
 @app.get("/api/graph/visualize", dependencies=[Depends(require_api_auth)])
-async def get_graph_visualize(pr_number: int = 6857, repo: str | None = None) -> dict[str, Any]:
+async def get_graph_visualize(pr_number: int, repo: str | None = None) -> dict[str, Any]:
     """Generate dynamic node and edge dataset for interactive Vis.js graph visualization."""
     settings = get_settings()
     data_dir = settings.data_dir

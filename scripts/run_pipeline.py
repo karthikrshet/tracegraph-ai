@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -58,7 +58,7 @@ async def _run(
     from app.crawler.session_manager import CrawlConfiguration, CrawlSession
     from app.graph import GraphBuilder
     from app.ingestor import RequirementIngestor
-    from app.llm import get_llm_provider
+    from app.llm import MockLLMProvider, get_llm_provider
     from app.models import UserFlow
     from app.pr_analyzer import PRAnalyzer
     from app.provenance import build_run_manifest
@@ -71,6 +71,8 @@ async def _run(
     data_dir = settings.data_dir
     data_dir.mkdir(parents=True, exist_ok=True)
     llm = get_llm_provider(settings)
+    if isinstance(llm, MockLLMProvider):
+        raise RuntimeError("A real LLM provider key is required; mock extraction is not accepted for an evidence run.")
     console.print(Panel.fit(f"[bold cyan]TraceGraph AI[/bold cyan]\n{repo} PR #{pr_number}"))
 
     console.print("[bold]1/5 Ingesting the selected public specification[/bold]")
@@ -106,7 +108,7 @@ async def _run(
             id=crawl_id,
             start_url=crawl_url,
             status="COMPLETED",
-            completed_at=datetime.utcnow(),
+            completed_at=datetime.now(timezone.utc),
             configuration=CrawlConfiguration(start_url=crawl_url, allowed_domains=settings.allowed_domains),
             pages_discovered=len(pages),
             elements_discovered=len(elements),

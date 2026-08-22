@@ -641,67 +641,6 @@ class AutonomousCrawlerAgent:
         relative_dom = f"artifacts/crawls/{self._session_id}/dom/{page.id}.html" if self._session_id != "default" else f"artifacts/{page.id}.html"
         return relative_shot, relative_dom
 
-    def _use_static_artifacts(self) -> tuple[list[Page], list[UIElement], list[Transition], dict[str, list[str]]]:
-        """Return validated static artifacts, generate real screenshot PNGs & DOM HTML on disk, and emit live events."""
-        raw_pages = CrawlerArtifact.STATIC_PAGES
-        elements = CrawlerArtifact.STATIC_ELEMENTS
-        transitions = CrawlerArtifact.STATIC_TRANSITIONS
-
-        pages: list[Page] = []
-        for p in raw_pages:
-            page_elements = [el for el in elements if el.page_id == p.id]
-            shot_rel, dom_rel = self._generate_page_artifacts(p, page_elements)
-            pages.append(
-                Page(
-                    id=p.id,
-                    url=p.url,
-                    title=p.title,
-                    flow_id=p.flow_id,
-                    step_order=p.step_order,
-                    screenshot_path=shot_rel,
-                    dom_path=dom_rel,
-                )
-            )
-
-        screen_graph: dict[str, list[str]] = {}
-        for t in transitions:
-            screen_graph.setdefault(t.from_page_id, []).append(t.to_page_id)
-
-        # Emit simulated progression events for UI stream
-        for idx, p in enumerate(pages):
-            self._emit("page_discovered", f"Discovered screen: {p.title} ({p.url})", {
-                "page_id": p.id,
-                "url": p.url,
-                "title": p.title,
-                "pages_count": idx + 1,
-            })
-            self._emit("dom_captured", f"Captured DOM snapshot for {p.id}", {
-                "page_id": p.id,
-                "dom_path": p.dom_path,
-            })
-            self._emit("screenshot_captured", f"Captured screenshot for {p.id}", {
-                "page_id": p.id,
-                "screenshot_path": p.screenshot_path,
-            })
-
-        for idx, t in enumerate(transitions):
-            self._emit("action_selected", f"Executing interaction: {t.action_label}", {
-                "action_id": f"ACTION-{idx+1:03d}",
-                "action_label": t.action_label,
-                "type": t.interaction_type,
-                "actions_count": idx + 1,
-            })
-            self._emit("transition_created", f"State transition: {t.from_page_id} → {t.to_page_id}", {
-                "transition_id": t.id,
-                "from_page": t.from_page_id,
-                "to_page": t.to_page_id,
-                "action": t.action_label,
-                "transitions_count": idx + 1,
-            })
-
-        self._save_artifacts(pages, elements, transitions, screen_graph)
-        return pages, elements, transitions, screen_graph
-
     async def _run_playwright_exploration(
         self,
         max_pages: int = 10,

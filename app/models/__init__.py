@@ -7,7 +7,7 @@ Each model maps 1:1 to a Neo4j node or relationship type.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
@@ -72,7 +72,7 @@ class Requirement(BaseModel):
     source_text: str = ""  # verbatim source paragraph
     testability_score: float = Field(0.0, ge=0.0, le=1.0)
     coverage_status: CoverageStatus = CoverageStatus.UNVERIFIED
-    extracted_at: datetime = Field(default_factory=datetime.utcnow)
+    extracted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ─────────────────────────────────────────────
@@ -93,7 +93,7 @@ class UIElement(BaseModel):
     data_test_id: str = ""  # data-test-id attribute if present
     bounding_box: dict[str, float] = Field(default_factory=dict)
     is_interactive: bool = True
-    captured_at: datetime = Field(default_factory=datetime.utcnow)
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Page(BaseModel):
@@ -106,7 +106,7 @@ class Page(BaseModel):
     dom_path: str = ""  # path to saved DOM snapshot
     flow_id: str = ""
     step_order: int = 0
-    captured_at: datetime = Field(default_factory=datetime.utcnow)
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class Transition(BaseModel):
@@ -118,7 +118,7 @@ class Transition(BaseModel):
     trigger_element_id: str = ""
     interaction_type: str = "click"  # click, form_submit, navigation
     action_label: str = ""
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class UserFlow(BaseModel):
@@ -174,7 +174,7 @@ class Evidence(BaseModel):
     source_ref: str = ""  # file:line or url
     source_text: str = ""
     matcher: str = ""  # method used (e.g. "embedding", "name_match")
-    observed_at: datetime = Field(default_factory=datetime.utcnow)
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     def model_post_init(self, __context: Any) -> None:
         self.confidence_tier = ConfidenceTier.from_score(self.confidence)
@@ -249,6 +249,7 @@ class ImpactedItem(BaseModel):
     risk_level: str  # HIGH | MEDIUM | LOW
     confidence: float
     confidence_tier: ConfidenceTier
+    category: str | None = None
     evidence_chain: list[
         str
     ]  # human-readable path e.g. ["PR#6857", "DropdownRow.tsx", "Add to Cart"]
@@ -263,7 +264,7 @@ class BlastRadiusReport(BaseModel):
     pr_url: str
     author: str = "contributor"
     overall_risk: str  # HIGH | MEDIUM | LOW | NONE
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     changed_files: list[str]
     impacted_ui_elements: list[ImpactedItem]
     impacted_flows: list[ImpactedItem]

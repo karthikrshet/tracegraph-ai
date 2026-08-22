@@ -34,8 +34,8 @@ services:
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - LLM_MODEL=${LLM_MODEL:-gpt-4o-mini}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
-      - TARGET_REPO=${TARGET_REPO:-saleor/saleor-dashboard}
-      - TARGET_PR=${TARGET_PR:-6857}
+      - TARGET_REPO=${TARGET_REPO:-}
+      - TARGET_PR=${TARGET_PR:-0}
       - DATA_DIR=/app/data
       - APP_ENV=${APP_ENV:-development}
       - API_BEARER_TOKEN=${API_BEARER_TOKEN:-}

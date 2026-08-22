@@ -151,6 +151,7 @@ class PRAnalyzer:
 
         # Step 2: Aggregate results
         changed_files = sorted({row["file_path"] for row in raw_paths if row.get("file_path")})
+        changed_symbols = {str(row["symbol_fqn"]) for row in raw_paths if row.get("symbol_fqn")}
         ui_impacts = self._aggregate_ui_impacts(raw_paths)
         flow_impacts = self._aggregate_flow_impacts(raw_paths)
         req_impacts = self._aggregate_req_impacts(raw_paths)
@@ -190,6 +191,7 @@ class PRAnalyzer:
             recommendation=recommendation,
             metrics={
                 "total_changed_files": len(changed_files),
+                "symbols_count": len(changed_symbols),
                 "impacted_ui_elements": len(ui_impacts),
                 "impacted_flows": len(flow_impacts),
                 "impacted_requirements": len(req_impacts),
@@ -313,6 +315,7 @@ class PRAnalyzer:
                 risk_level=_risk_level(confidence),
                 confidence=confidence,
                 confidence_tier=ConfidenceTier.from_score(confidence),
+                category=str(row.get("req_category") or "general"),
                 evidence_chain=evidence_chain,
                 raw_path=[
                     {"type": "PullRequest", "id": str(row.get("pr_number", ""))},
