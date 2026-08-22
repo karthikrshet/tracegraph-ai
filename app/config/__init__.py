@@ -104,7 +104,13 @@ class Settings(BaseSettings):
     api_bearer_token: str = ""
     allowed_origins: str = "http://localhost:8000"
 
-    @field_validator("target_pr", "crawler_timeout", "crawler_max_depth", mode="before")
+    @field_validator(
+        "target_pr",
+        "crawler_timeout",
+        "crawler_max_depth",
+        "allow_custom_crawl_hosts",
+        mode="before",
+    )
     @classmethod
     def blank_integer_environment_values_use_defaults(cls, value: object, info: object) -> object:
         """Treat blank deployment variables as absent rather than crashing startup.
@@ -117,10 +123,13 @@ class Settings(BaseSettings):
         fast during deployment/configuration.
         """
         if isinstance(value, str) and not value.strip():
-            defaults = {
+            defaults: dict[str, object] = {
                 "target_pr": 0,
                 "crawler_timeout": 30000,
                 "crawler_max_depth": 3,
+                # An unset value retains the environment-sensitive default:
+                # enabled in development and disabled in production.
+                "allow_custom_crawl_hosts": None,
             }
             field_name = getattr(info, "field_name", "")
             return defaults[field_name]

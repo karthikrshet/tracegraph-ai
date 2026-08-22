@@ -58,6 +58,14 @@ def test_blank_integer_deployment_variables_use_safe_defaults(monkeypatch):
     assert settings.crawler_max_depth == 3
 
 
+def test_blank_boolean_deployment_variable_keeps_safe_environment_default(monkeypatch):
+    """A blank Compose boolean must not stop the API before it can bind a port."""
+    monkeypatch.setenv("ALLOW_CUSTOM_CRAWL_HOSTS", "")
+
+    assert Settings(app_env="development").custom_crawl_hosts_enabled is True
+    assert Settings(app_env="production").custom_crawl_hosts_enabled is False
+
+
 def test_vercel_is_recognised_as_a_serverless_runtime(monkeypatch):
     monkeypatch.setenv("VERCEL", "1")
     assert Settings().is_serverless_runtime is True

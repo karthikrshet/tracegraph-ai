@@ -46,7 +46,9 @@ services:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:8000}
       - ALLOWED_CRAWL_DOMAINS=${ALLOWED_CRAWL_DOMAINS:-}
       - ALLOWED_DOCUMENT_DOMAINS=${ALLOWED_DOCUMENT_DOMAINS:-github.com,raw.githubusercontent.com}
-      - ALLOW_CUSTOM_CRAWL_HOSTS=${ALLOW_CUSTOM_CRAWL_HOSTS:-}
+      # Compose forwards an empty variable as an empty string, which is not a
+      # valid Pydantic boolean. Keep the secure default explicit instead.
+      - ALLOW_CUSTOM_CRAWL_HOSTS=${ALLOW_CUSTOM_CRAWL_HOSTS:-false}
       - CRAWLER_TIMEOUT=${CRAWLER_TIMEOUT:-30000}
       - CRAWLER_MAX_DEPTH=${CRAWLER_MAX_DEPTH:-3}
     volumes:
