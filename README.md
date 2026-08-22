@@ -31,19 +31,47 @@ If this repository was ever configured with a real provider key, revoke and rota
 
 ## Architecture
 
-```text
-public spec ──► deterministic fetch/sanitize + LLM extraction ──► Requirement
-live browser ─► Playwright observation ─────────────────────────► Page/UIElement/Transition
-GitHub PR ────► immutable source fetch + parser ────────────────► PRChange/CodeFile/CodeSymbol
-                                                               │
-                                                       Neo4j evidence graph
-                                                               │
-                                                    deterministic blast radius
-                                                               │
-                                evidence verifier ──► reviewer-ready QA plan
+TraceGraph is an evidence pipeline, not a free-form agent that guesses an answer.
+Every run has one selected product surface: a public application, its public
+documentation, and the matching public repository/PR.
+
+```mermaid
+flowchart LR
+    Spec[Public specification] --> Sanitize[Safe fetch + sanitise]
+    Sanitize --> Extract[LLM requirement extraction]
+    Extract --> Req[Requirement evidence]
+
+    App[Allowlisted live application] --> Crawl[Bounded Playwright crawl]
+    Crawl --> UI[Pages, DOM, screenshots, UI controls, transitions]
+
+    PR[GitHub PR at immutable head SHA] --> Parse[Source retrieval + parser]
+    Parse --> Code[PR changes, code files, symbols]
+
+    Req --> Graph[(Neo4j active-run graph)]
+    UI --> Graph
+    Code --> Graph
+
+    Graph --> Traverse[Deterministic graph traversal]
+    Traverse --> Report[Blast-radius report]
+    Report --> Verify[Artifact and path verifier]
+    Verify --> QA[Evidence-grounded QA plan]
 ```
 
-LLM use is bounded to requirement extraction from a delimited, untrusted document payload. It does not decide blast radius or narrate facts beyond the deterministic report template.
+| Component | Responsibility | Output / failure boundary |
+|---|---|---|
+| **Web crawler** | Validates an allowlisted public URL, runs bounded same-domain Playwright exploration, and persists browser-observed artifacts. | `Page`, `UIElement`, `Transition`, DOM, and screenshots. If the browser/crawl fails, there is no substitute crawl evidence. |
+| **Specification ingestor** | Safely fetches or accepts pasted product text, keeps source provenance, and asks an LLM for structured, testable requirement candidates. | `Requirement` records with source evidence and testability. Ambiguous or unavailable source remains `UNVERIFIED`; requirements are never invented. |
+| **Code analyzer** | Fetches the selected public PR at its immutable head SHA and extracts changed files, patches, and source symbols. | `PullRequest`, `PRChange`, `CodeFile`, and `CodeSymbol`. A temporary GitHub failure can reuse only the exact previously stored PR record; otherwise the run stops. |
+| **Mapping + graph builder** | Creates conservative source-to-UI candidate links and loads all three evidence layers into Neo4j. | A single active-run graph; re-indexing replaces graph nodes but keeps immutable disk artifacts and manifests. Weak mappings remain unmapped. |
+| **Impact engine** | Traverses only stored relationships from PR change to UI, flow, and requirement, calculating confidence from hop weights. | Deterministic blast radius and raw evidence paths. Missing coverage is reported as a gap, not as zero code change. |
+| **Evidence verifier + QA planner** | Confirms graph-path shape, selected-crawl ownership, DOM/screenshot presence, and observed transitions before creating test candidates. | `APPROVED`, `NEEDS_REVIEW`, `REJECTED`, or `INSUFFICIENT_EVIDENCE`; it never creates a generic fallback test. |
+
+The LLM is deliberately bounded. It extracts requirements from a delimited,
+untrusted document payload and may render a human-readable explanation from
+structured graph facts. It does **not** select the PR, crawl the product,
+create graph edges, calculate confidence, decide blast radius, or promote a
+claim without evidence. A deterministic report renderer is used when an LLM
+summary is unavailable.
 
 ### Evidence-grounded QA planning
 
