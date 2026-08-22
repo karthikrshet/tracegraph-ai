@@ -203,3 +203,21 @@ async def test_metrics_populated(tmp_path):
     assert "total_changed_files" in report.metrics
     assert "impacted_requirements" in report.metrics
     assert report.metrics["impacted_requirements"] >= 1
+
+
+def test_fallback_summary_groups_repeated_controls_by_visible_label(tmp_path):
+    """The QA-facing summary should not look like duplicated evidence."""
+    analyzer = PRAnalyzer(graph=make_mock_graph([]), llm=MockLLMProvider(), data_dir=tmp_path)
+    impacts = [
+        analyzer._aggregate_ui_impacts(
+            [{**SAMPLE_PATHS[0], "ui_element_id": "UI-home", "page_url": "https://example.test/"}]
+        )[0],
+        analyzer._aggregate_ui_impacts(
+            [{**SAMPLE_PATHS[0], "ui_element_id": "UI-login", "page_url": "https://example.test/login"}]
+        )[0],
+    ]
+
+    summary = analyzer._fallback_summary(6857, "PR Title", ["src/auth.ts"], impacts, [], [])
+
+    assert "**2 browser-observed selector instance(s)** across **1 distinct UI control(s)**" in summary
+    assert "Product Attribute Dropdown` (2 observed selectors)" in summary

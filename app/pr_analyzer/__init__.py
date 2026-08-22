@@ -16,6 +16,7 @@ CRITICAL DESIGN PRINCIPLE:
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -436,7 +437,21 @@ class PRAnalyzer:
         """Deterministic, domain-accurate blast-radius summary when LLM is unavailable."""
         flow_names = ", ".join(f"**{i.label}**" for i in flows) if flows else "None detected"
         req_list = ", ".join(f"`{i.item_id}` ({i.label})" for i in reqs[:3]) if reqs else "None detected"
-        ui_list = ", ".join(f"`{u.label}`" for u in ui[:4]) if ui else "None detected"
+        ui_groups: dict[str, int] = {}
+        for item in ui:
+            # The persisted ImpactedItem keeps its route so QA can find the
+            # exact selector.  A non-engineer summary should instead describe
+            # the unique control and state how many observed instances it has.
+            control = re.sub(r"\s+\([^)]*/[^)]*\)$", "", item.label).strip() or item.label
+            ui_groups[control] = ui_groups.get(control, 0) + 1
+        ui_list = (
+            ", ".join(
+                f"`{label}` ({count} observed {'selector' if count == 1 else 'selectors'})"
+                for label, count in list(ui_groups.items())[:4]
+            )
+            if ui_groups
+            else "None detected"
+        )
         files_str = ", ".join(f"`{f.split('/')[-1]}`" for f in changed_files[:4])
 
         avg_confidence = sum(item.confidence for item in ui) / len(ui) if ui else 0.0
@@ -444,7 +459,8 @@ class PRAnalyzer:
             f"### PR #{pr_number} Analysis: {pr_title}\n\n"
             f"**1. Code Modifications & Blast Radius:**\n"
             f"This pull request modifies {len(changed_files)} file(s) ({files_str}). "
-            f"TraceGraph found **{len(ui)} browser-observed UI link(s)** ({ui_list}) through deterministic, provenance-recorded mappings.\n\n"
+            f"TraceGraph found **{len(ui)} browser-observed selector instance(s)** across "
+            f"**{len(ui_groups)} distinct UI control(s)** ({ui_list}) through deterministic, provenance-recorded mappings.\n\n"
             f"**2. Impacted User Flows & Business Requirements:**\n"
             f"The changes affect {len(flows)} key user journey(s): {flow_names}. "
             f"Key product requirements at risk include: {req_list}. "

@@ -768,7 +768,15 @@ async def get_requirements() -> dict[str, Any]:
 
 @app.get("/api/graph/visualize", dependencies=[Depends(require_api_auth)])
 async def get_graph_visualize(pr_number: int, repo: str | None = None) -> dict[str, Any]:
-    """Generate dynamic node and edge dataset for interactive Vis.js graph visualization."""
+    """Generate an evidence-preserving, readable Vis.js graph projection.
+
+    Neo4j retains one UIElement per observed selector so every browser artifact
+    remains addressable.  Rendering every repeated "Sign in" selector as its
+    own node, however, creates a starburst that hides the cross-layer story.
+    This endpoint therefore groups *only the visual projection* by changed
+    symbol and visible label, exposes the selector count on that node, and
+    leaves the stored evidence graph untouched.
+    """
     settings = get_settings()
     data_dir = settings.data_dir
     target_repo = repo or settings.target_repo
@@ -846,10 +854,61 @@ async def get_graph_visualize(pr_number: int, repo: str | None = None) -> dict[s
     finally:
         graph.close()
 
-    seen_ui = set()
+    visual_ui: dict[tuple[str, str], dict[str, Any]] = {}
     seen_pages = set()
     seen_flows = set()
     seen_reqs = set()
+    seen_edges: set[tuple[str, str, str]] = set()
+
+    def add_edge(source: str, target: str, relation: str, **attrs: Any) -> None:
+        """Add one relation to the visual projection without duplicate edges."""
+        key = (source, target, relation)
+        if key not in seen_edges:
+            seen_edges.add(key)
+            edges.append({"from": source, "to": target, "label": relation, **attrs})
+
+    # Build visual UI clusters first.  The key contains the changed symbol so
+    # identical labels from unrelated code remain distinct evidence groups.
+    for row in raw_paths:
+        ui_id = row.get("ui_element_id")
+        if not ui_id:
+            continue
+        raw_label = str(row.get("ui_element_label") or ui_id).strip()
+        display_label = re.sub(r"\s+\([^)]*/[^)]*\)$", "", raw_label).strip() or raw_label
+        symbol_fqn = str(row.get("symbol_fqn") or "unmapped-symbol")
+        key = (symbol_fqn, display_label.casefold())
+        cluster = visual_ui.setdefault(
+            key,
+            {
+                "id": f"visual-ui-{len(visual_ui) + 1}",
+                "label": display_label,
+                "symbol_fqn": symbol_fqn,
+                "raw_ids": set(),
+            },
+        )
+        cluster["raw_ids"].add(str(ui_id))
+
+    for cluster in visual_ui.values():
+        selector_count = len(cluster["raw_ids"])
+        suffix = "selector" if selector_count == 1 else "selectors"
+        nodes.append({
+            "id": cluster["id"],
+            "label": f"UI: {cluster['label']}\n{selector_count} observed {suffix}",
+            "title": f"{selector_count} browser-observed selector instance(s). Raw evidence remains in Neo4j.",
+            "group": "ui",
+            "color": "#06b6d4",
+            "size": 24,
+            "borderWidth": 2,
+        })
+        if cluster["symbol_fqn"] != "unmapped-symbol" and f"sym-{cluster['symbol_fqn']}" in seen_symbols:
+            add_edge(
+                f"sym-{cluster['symbol_fqn']}",
+                cluster["id"],
+                "IMPLEMENTED_BY",
+                arrows="to",
+                width=2,
+                color={"color": "#38bdf8", "highlight": "#67e8f9"},
+            )
 
     for row in raw_paths:
         ui_id = row.get("ui_element_id")
@@ -858,45 +917,34 @@ async def get_graph_visualize(pr_number: int, repo: str | None = None) -> dict[s
         flow_id = row.get("flow_id")
         req_id = row.get("req_id")
 
-        if ui_id and ui_id not in seen_ui:
-            seen_ui.add(ui_id)
-            nodes.append({
-                "id": ui_id,
-                "label": f"UI: {row.get('ui_element_label', ui_id)}",
-                "group": "ui",
-                "color": "#06b6d4",
-                "size": 22,
-                "borderWidth": 2,
-            })
-            if sym_fqn and f"sym-{sym_fqn}" in seen_symbols:
-                edges.append({
-                    "from": f"sym-{sym_fqn}",
-                    "to": ui_id,
-                    "label": "IMPLEMENTS (94%)",
-                    "arrows": "to",
-                    "width": 2,
-                    "color": {"color": "#38bdf8", "highlight": "#67e8f9"},
-                })
+        visual_ui_id = None
+        if ui_id:
+            raw_label = str(row.get("ui_element_label") or ui_id).strip()
+            display_label = re.sub(r"\s+\([^)]*/[^)]*\)$", "", raw_label).strip() or raw_label
+            matched_cluster = visual_ui.get((str(sym_fqn or "unmapped-symbol"), display_label.casefold()))
+            visual_ui_id = matched_cluster["id"] if matched_cluster else None
 
         if page_id and page_id not in seen_pages:
             seen_pages.add(page_id)
+            route = urlparse(str(row.get("page_url") or "")).path or "/"
             nodes.append({
                 "id": page_id,
-                "label": f"Page: {row.get('page_title', page_id)}",
+                "label": f"Page: {route}",
+                "title": str(row.get("page_title") or route),
                 "group": "page",
                 "color": "#3b82f6",
                 "size": 24,
                 "borderWidth": 2,
             })
-            if ui_id:
-                edges.append({
-                    "from": ui_id,
-                    "to": page_id,
-                    "label": "PART_OF",
-                    "arrows": "to",
-                    "width": 2,
-                    "color": {"color": "#60a5fa", "highlight": "#93c5fd"},
-                })
+        if visual_ui_id and page_id:
+            add_edge(
+                visual_ui_id,
+                page_id,
+                "PART_OF",
+                arrows="to",
+                width=2,
+                color={"color": "#60a5fa", "highlight": "#93c5fd"},
+            )
 
         if flow_id and flow_id not in seen_flows:
             seen_flows.add(flow_id)
@@ -908,15 +956,15 @@ async def get_graph_visualize(pr_number: int, repo: str | None = None) -> dict[s
                 "size": 26,
                 "borderWidth": 2,
             })
-            if page_id:
-                edges.append({
-                    "from": page_id,
-                    "to": flow_id,
-                    "label": "STEP_IN",
-                    "arrows": "to",
-                    "width": 2,
-                    "color": {"color": "#fbbf24", "highlight": "#fde68a"},
-                })
+        if page_id and flow_id:
+            add_edge(
+                page_id,
+                flow_id,
+                "STEP_IN",
+                arrows="to",
+                width=2,
+                color={"color": "#fbbf24", "highlight": "#fde68a"},
+            )
 
         if req_id and req_id not in seen_reqs:
             seen_reqs.add(req_id)
@@ -928,15 +976,15 @@ async def get_graph_visualize(pr_number: int, repo: str | None = None) -> dict[s
                 "size": 20,
                 "borderWidth": 2,
             })
-            if flow_id:
-                edges.append({
-                    "from": flow_id,
-                    "to": req_id,
-                    "label": "REQUIRES (85%)",
-                    "arrows": "to",
-                    "width": 2,
-                    "color": {"color": "#34d399", "highlight": "#6ee7b7"},
-                })
+        if flow_id and req_id:
+            add_edge(
+                flow_id,
+                req_id,
+                "COVERS",
+                arrows="to",
+                width=2,
+                color={"color": "#34d399", "highlight": "#6ee7b7"},
+            )
 
     return {
         "status": "ok",

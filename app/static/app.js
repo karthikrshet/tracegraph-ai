@@ -1329,18 +1329,25 @@ async function loadKnowledgeGraph(repo, prNumber) {
           strokeWidth: 2,
           strokeColor: "#090d16",
         },
-        smooth: { type: "continuous", roundness: 0.2 },
+        smooth: { type: "cubicBezier", forceDirection: "horizontal", roundness: 0.35 },
       },
       physics: {
-        enabled: true,
-        stabilization: { iterations: 120 },
-        barnesHut: {
-          gravitationalConstant: -15000,
-          centralGravity: 0.25,
-          springLength: 220,
-          springConstant: 0.04,
-          damping: 0.09,
-          avoidOverlap: 0.9,
+        // This is a directed evidence chain, not a social network.  A stable
+        // left-to-right layout makes the PR → code → UI → requirement story
+        // readable and keeps Fit Screen deterministic.
+        enabled: false,
+      },
+      layout: {
+        hierarchical: {
+          enabled: true,
+          direction: "LR",
+          sortMethod: "directed",
+          levelSeparation: 210,
+          nodeSpacing: 150,
+          treeSpacing: 180,
+          blockShifting: true,
+          edgeMinimization: true,
+          parentCentralization: true,
         },
       },
       interaction: {

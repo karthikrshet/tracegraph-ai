@@ -404,6 +404,7 @@ input[type="text"]:focus, input[type="number"]:focus {
   flex-direction: column;
   background-color: var(--bg-app);
   overflow: hidden;
+  min-width: 0;
 }
 
 .tab-strip {
@@ -411,6 +412,9 @@ input[type="text"]:focus, input[type="number"]:focus {
   background-color: #0b1324;
   border-bottom: 1px solid var(--border-subtle);
   padding: 0 16px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .tab-item {
@@ -425,6 +429,8 @@ input[type="text"]:focus, input[type="number"]:focus {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
+  white-space: nowrap;
   border-bottom: 2px solid transparent;
   transition: all 0.15s;
 }
@@ -442,6 +448,7 @@ input[type="text"]:focus, input[type="number"]:focus {
   display: none;
   flex: 1;
   overflow-y: auto;
+  min-width: 0;
 }
 
 .tab-panel.active {
@@ -467,6 +474,8 @@ input[type="text"]:focus, input[type="number"]:focus {
   background-color: #0d1527;
   border-bottom: 1px solid var(--border-subtle);
   z-index: 10;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .canvas-actions {
@@ -477,6 +486,7 @@ input[type="text"]:focus, input[type="number"]:focus {
 .canvas-legend {
   display: flex;
   gap: 14px;
+  flex-wrap: wrap;
   font-size: 0.76rem;
   font-weight: 600;
   color: var(--text-secondary);
@@ -518,6 +528,7 @@ input[type="text"]:focus, input[type="number"]:focus {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-width: 0;
 }
 
 .panel-header {
@@ -542,7 +553,9 @@ input[type="text"]:focus, input[type="number"]:focus {
   background-color: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .section-title {
@@ -558,6 +571,7 @@ input[type="text"]:focus, input[type="number"]:focus {
 
 .styled-table {
   width: 100%;
+  min-width: 680px;
   border-collapse: collapse;
   font-size: 0.84rem;
   table-layout: auto;
@@ -584,10 +598,12 @@ input[type="text"]:focus, input[type="number"]:focus {
   color: var(--text-primary);
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   vertical-align: middle;
+  overflow-wrap: anywhere;
 }
 
 .styled-table td code {
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-family: var(--font-mono);
   background: #090d16;
   border: 1px solid #1e293b;
@@ -601,6 +617,40 @@ input[type="text"]:focus, input[type="number"]:focus {
 
 .styled-table tr:hover {
   background-color: var(--bg-card-hover);
+}
+
+#tableCrawlSessions {
+  min-width: 980px;
+}
+
+#tableCrawlSessions td:last-child {
+  min-width: 156px;
+}
+
+#tableCrawlSessions .btn-tool {
+  margin: 2px 0;
+}
+
+#qaView .input-with-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  max-width: 840px !important;
+  align-items: stretch;
+}
+
+#qaView .input-with-action select {
+  min-width: 0;
+  min-height: 48px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  font: 500 0.88rem var(--font-sans);
+}
+
+#qaView .input-with-action .btn {
+  min-height: 48px;
 }
 
 /* ── Evidence Cards ──────────────────────────────────────── */
@@ -1123,7 +1173,119 @@ input[type="text"]:focus, input[type="number"]:focus {
   border-color: var(--border-focus);
 }
 
+@media (max-width: 1200px) {
+  .main-body {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .navbar-center {
+    display: none;
+  }
+
+  .tab-strip {
+    padding: 0 8px;
+  }
+
+  .tab-item {
+    padding: 12px 11px;
+    font-size: 0.8rem;
+    gap: 6px;
+  }
+
+  .canvas-legend {
+    gap: 9px;
+  }
+}
+
+@media (max-width: 900px) {
+  body {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
+  .app-layout {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .navbar {
+    height: auto;
+    min-height: 56px;
+    padding: 8px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .navbar-right {
+    margin-left: auto;
+  }
+
+  .main-body {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    overflow: visible;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+    max-height: none;
+    overflow: visible;
+  }
+
+  .workspace {
+    min-height: 680px;
+  }
+
+  .canvas-wrapper {
+    min-height: 600px;
+    height: 70vh;
+  }
+}
+
 @media (max-width: 760px) {
+  .navbar-right .status-indicator {
+    display: none;
+  }
+
+  .brand-title {
+    font-size: 1rem;
+  }
+
+  .tab-item {
+    padding: 11px 12px;
+  }
+
+  .report-content {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .panel-header {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .canvas-bar {
+    padding: 8px 12px;
+  }
+
+  .canvas-actions {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .canvas-legend {
+    font-size: 0.72rem;
+  }
+
+  #qaView .input-with-action {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: none !important;
+  }
+
   .spec-ingest-grid {
     grid-template-columns: 1fr;
   }
