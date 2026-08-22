@@ -38,6 +38,16 @@ from app.models import (
 
 logger = logging.getLogger(__name__)
 
+# Terms that express independently testable UI behavior.  When a requirement
+# includes one of these, a matching generic noun alone cannot establish full
+# coverage.  The set is intentionally domain-neutral and may be extended only
+# with an accompanying regression test.
+_COVERAGE_OBLIGATION_TERMS = {
+    "add", "author", "create", "delete", "download", "edit", "filter", "logout",
+    "login", "pagination", "pay", "register", "remove", "save", "search", "select",
+    "shipping", "submit", "update", "upload",
+}
+
 
 class GraphUnavailableError(RuntimeError):
     """Raised when Neo4j is unavailable; impact reports must not be fabricated."""
@@ -76,62 +86,79 @@ class GraphBuilder:
             self._driver.close()
 
     @staticmethod
-    def _ui_code_mapping_score(element: UIElement, symbol: CodeSymbol) -> tuple[float, str]:
-        """Return a conservative, explainable UI-to-code mapping score."""
+    def _evidence_terms(value: str) -> set[str]:
+        """Normalize visible/product terms without relying on an LLM guess."""
+        normalized = re.sub(r"sign\s*in", " login ", value.lower())
+        normalized = re.sub(r"sign\s*up", " register ", normalized)
+        normalized = re.sub(r"paginat(?:e|ed|ion)", " pagination ", normalized)
+        normalized = normalized.replace("signup", "register").replace("signin", "login")
+        normalized = re.sub(r"([a-z])([A-Z])", r"\1 \2", normalized)
+        return {
+            term
+            for term in re.findall(r"[a-z0-9]+", normalized)
+            if len(term) > 2 and term not in {"app", "component", "components", "page", "pages", "src", "feature", "features", "core", "the", "and", "for"}
+        }
+
+    @classmethod
+    def _ui_code_mapping_score(cls, element: UIElement, symbol: CodeSymbol) -> tuple[float, str]:
+        """Return a conservative, explainable UI-to-code mapping score.
+
+        Component membership alone is not enough to call every control in that
+        component impacted.  The matcher therefore requires an exact test-id,
+        a strong label-to-symbol match, or a narrowly documented domain alias.
+        Weak partial token overlap stays unmapped for human triage.
+        """
         label_normalized = re.sub(r"[^a-z0-9]", "", element.label.lower())
-        label_words = {word for word in re.findall(r"[a-z0-9]+", element.label.lower()) if len(word) > 2}
-        label_terms = set(label_words)
-        if len(label_normalized) > 2:
-            label_terms.add(label_normalized)
         symbol_normalized = re.sub(r"[^a-z0-9]", "", symbol.name.lower())
+        label_terms = cls._evidence_terms(element.label)
+        symbol_terms = cls._evidence_terms(symbol.name)
         if not label_terms or not symbol_normalized:
             return 0.0, "name_match"
 
-        name_overlap = sum(1 for word in label_words if word in symbol_normalized)
-        score = name_overlap / max(len(label_words), 1)
+        test_id_normalized = re.sub(r"[^a-z0-9]", "", element.data_test_id.lower())
+        if test_id_normalized and (
+            test_id_normalized in symbol_normalized or symbol_normalized in test_id_normalized
+        ):
+            return 0.95, "data_test_id_match"
+
         if len(label_normalized) >= 3 and (
             label_normalized in symbol_normalized or symbol_normalized in label_normalized
         ):
-            score = max(score, 0.8)
-        if score:
-            return score, "name_match"
+            return 0.9, "name_match"
 
-        path_words = set(re.findall(r"[a-z0-9]+", symbol.file_path.lower()))
-        path_words -= {"app", "component", "components", "core", "feature", "features", "page", "pages", "src", "ts"}
-        if "auth" in path_words:
-            path_words.update({"login", "signin", "signup", "register", "authentication"})
-        if label_terms & path_words:
-            return 0.55, "file_path_semantic_match"
+        # A multi-word visible label must substantially match the symbol name;
+        # one shared generic noun (for example Article) is insufficient.
+        if symbol_terms and len(label_terms & symbol_terms) / len(label_terms) >= 0.75:
+            return 0.8, "name_match"
+
+        path_terms = cls._evidence_terms(symbol.file_path)
+        # This is intentionally the only domain alias. Authentication entry
+        # controls have stable, user-facing names across frameworks; all other
+        # component-surface guesses are left unmapped.
+        if "auth" in path_terms and label_terms & {"login", "register"}:
+            return 0.7, "auth_entry_semantic_match"
+        if label_terms.issubset(path_terms):
+            return 0.7, "file_path_semantic_match"
         return 0.0, "name_match"
 
-    @staticmethod
-    def _requirement_ui_coverage_score(requirement: Requirement, element: UIElement) -> float:
-        """Compute bounded semantic coverage without broad category leakage."""
-        category_keywords: dict[str, set[str]] = {
-            "product": {"product", "listing", "detail", "description", "image", "cart"},
-            "product_attributes": {"attribute", "dropdown", "swatch", "color", "size", "combobox", "search"},
-            "cart": {"cart", "basket", "quantity", "remove"},
-            "checkout": {"checkout", "address", "shipping", "payment", "order"},
-            "content": {"page", "content", "cms"},
-            "general": set(),
-        }
-        requirement_terms = set(re.findall(r"[a-z0-9]+", requirement.text.lower()))
-        requirement_terms |= category_keywords.get(requirement.category, set())
-        auth_terms = {"authentication", "authenticate", "login", "logout", "register", "signin", "signup"}
-        if requirement_terms & auth_terms:
-            requirement_terms |= auth_terms
-
-        label_normalized = re.sub(r"[^a-z0-9]", "", element.label.lower())
-        element_terms = {word for word in re.findall(r"[a-z0-9]+", element.label.lower()) if len(word) > 2}
-        if len(label_normalized) > 2:
-            element_terms.add(label_normalized)
-        if not element_terms:
+    @classmethod
+    def _requirement_ui_coverage_score(cls, requirement: Requirement, element: UIElement) -> float:
+        """Return coverage only when a visible control satisfies a concrete obligation."""
+        requirement_terms = cls._evidence_terms(requirement.text)
+        element_terms = cls._evidence_terms(f"{element.label} {element.aria_label} {element.data_test_id}")
+        if not requirement_terms or not element_terms:
             return 0.0
 
-        overlap = len(requirement_terms & element_terms) / max(len(requirement_terms), 1)
-        if requirement_terms & auth_terms and element_terms & auth_terms:
-            overlap = max(overlap, 0.3)
-        return overlap
+        required_actions = requirement_terms & _COVERAGE_OBLIGATION_TERMS
+        # If the requirement names a concrete action, a generic noun match
+        # (for example "Article") cannot establish its UI coverage.
+        if required_actions and not required_actions & element_terms:
+            return 0.0
+
+        overlap = requirement_terms & element_terms
+        if not overlap:
+            return 0.0
+        return min(0.95, 0.65 + 0.1 * len(overlap))
 
     # ─────────────────────────────────────────
     #  Schema Setup
@@ -422,7 +449,7 @@ class GraphBuilder:
                         best_sym = sym
                         best_method = method
 
-                if best_sym and best_score >= 0.4:
+                if best_sym and best_score >= 0.7:
                     session.run(
                         cypher,
                         element_id=element.id,
@@ -482,7 +509,7 @@ class GraphBuilder:
         check_cypher = """
         MATCH (r:Requirement {id: $req_id})
         OPTIONAL MATCH (r)-[:COVERS]->(e:UIElement)
-        RETURN count(e) AS covered_count
+        RETURN count(e) AS covered_count, collect(DISTINCT e.label) AS labels
         """
         update_cypher = """
         MATCH (r:Requirement {id: $req_id})
@@ -497,13 +524,23 @@ class GraphBuilder:
                         f"Coverage query returned no result for requirement '{req.id}'."
                     )
                 count = int(record["covered_count"])
+                observed_terms = set().union(
+                    *(self._evidence_terms(str(label)) for label in record["labels"] if label)
+                )
+                requirement_terms = self._evidence_terms(req.text)
+                required_actions = requirement_terms & _COVERAGE_OBLIGATION_TERMS
 
                 if count == 0:
                     # A bounded crawl never proves product-wide absence. Keep the
                     # epistemic distinction explicit until an exhaustive coverage
                     # certificate has been recorded.
                     session.run(update_cypher, req_id=req.id, status=CoverageStatus.UNVERIFIED.value)
-                elif count < 2:
+                elif required_actions and not required_actions.issubset(observed_terms):
+                    # A compound requirement can mention multiple independently
+                    # testable actions (for example login, register, and logout).
+                    # A subset of those controls is meaningful but not full coverage.
+                    session.run(update_cypher, req_id=req.id, status=CoverageStatus.PARTIAL.value)
+                elif len({label.casefold().strip() for label in record["labels"] if label}) < 2:
                     session.run(update_cypher, req_id=req.id, status=CoverageStatus.PARTIAL.value)
                 else:
                     session.run(update_cypher, req_id=req.id, status=CoverageStatus.COVERED.value)

@@ -87,5 +87,5 @@ def test_auth_synonyms_produce_explicit_coverage_evidence():
         category="general",
     )
 
-    assert GraphBuilder._ui_code_mapping_score(sign_in, auth_symbol) == (0.55, "file_path_semantic_match")
+    assert GraphBuilder._ui_code_mapping_score(sign_in, auth_symbol) == (0.7, "auth_entry_semantic_match")
     assert GraphBuilder._requirement_ui_coverage_score(auth_requirement, sign_in) >= 0.3

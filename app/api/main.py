@@ -36,7 +36,7 @@ from app.crawler.session_manager import CrawlConfiguration, CrawlSessionManager
 from app.graph import GraphBuilder, GraphUnavailableError
 from app.ingestor import RequirementIngestor
 from app.llm import MockLLMProvider, get_llm_provider
-from app.models import BlastRadiusReport, UserFlow
+from app.models import BlastRadiusReport, CoverageStatus, UserFlow
 from app.pr_analyzer import PRAnalyzer
 from app.qa_intelligence import QAIntelligenceEngine
 
@@ -780,7 +780,13 @@ async def get_requirements() -> dict[str, Any]:
         if graph.available:
             statuses = graph.get_requirement_coverage_statuses(requirements)
             requirements = [
-                req.model_copy(update={"coverage_status": statuses.get(req.id, req.coverage_status)})
+                req.model_copy(
+                    update={
+                        "coverage_status": CoverageStatus(statuses[req.id])
+                        if req.id in statuses
+                        else req.coverage_status
+                    }
+                )
                 for req in requirements
             ]
     except GraphUnavailableError:

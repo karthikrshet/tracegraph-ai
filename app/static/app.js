@@ -1137,8 +1137,11 @@ function renderBlastRadiusReport(report) {
     (report.impacted_flows || []).length > 0 ||
     (report.impacted_requirements || []).length > 0;
   const hasCodeEvidence = (report.changed_files || []).length > 0;
+  const hasHeuristicMappings = (report.impacted_ui_elements || []).some(item =>
+    ["auth_entry_semantic_match", "file_path_semantic_match"].includes(item.mapping_method)
+  );
   document.getElementById("llmEngineBadge").innerText = hasBrowserImpact
-    ? "GRAPH VERIFIED"
+    ? (hasHeuristicMappings ? "GRAPH PATHS VERIFIED • QA REVIEW" : "GRAPH PATHS VERIFIED")
     : hasCodeEvidence
       ? "CODE VERIFIED • NO UI PATH"
       : "EVIDENCE INCOMPLETE";
@@ -1164,7 +1167,7 @@ function renderBlastRadiusReport(report) {
       <td><code>${escapeHtml(item.element_type || "UIElement")}</code></td>
       <td>${riskBadge(item.risk_level)}</td>
       <td><code>${(item.confidence * 100).toFixed(0)}%</code></td>
-      <td><small>${escapeHtml((item.evidence_chain || []).slice(-2).join(" → ") || "PR change traversal")}</small></td>
+      <td><small>${escapeHtml((item.evidence_chain || []).slice(-2).join(" → ") || "PR change traversal")}</small><br><small class="text-muted">${escapeHtml(item.mapping_method || "unmapped")}</small></td>
     `;
     uiTbody.appendChild(row);
   });
@@ -1195,7 +1198,7 @@ function renderBlastRadiusReport(report) {
       <td>${escapeHtml(item.label)}</td>
       <td><span class="badge badge-partial">${escapeHtml(item.category || "general")}</span></td>
       <td><code>${(item.confidence * 100).toFixed(0)}%</code></td>
-      <td>${riskBadge(item.risk_level)}</td>
+      <td>${riskBadge(item.risk_level)}<br><small class="text-muted">${escapeHtml(item.coverage_status || "UNVERIFIED")} coverage</small></td>
     `;
     reqTbody.appendChild(row);
   });

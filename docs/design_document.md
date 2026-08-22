@@ -474,13 +474,19 @@ symbol renders a browser-observed UI element?
 Our approach (in order of confidence):
 1. **Exact name match** (highest confidence): component and UI label share a distinctive normalized token.
 2. **data-test-id match** (high confidence): a DOM test ID matches a component or symbol name.
-3. **File-path semantic match** (lower confidence): the source path carries a bounded domain term, such as `auth`, and the observed UI label carries an auth term such as Sign in or Sign up.
-4. **No LLM fallback:** weak matches remain unmapped and are surfaced for review
+3. **Narrow auth-entry semantic match** (lower confidence): an `auth` source
+   path and public Sign in/Sign up control form a labelled candidate mapping.
+4. **No component-surface inference:** a partial shared noun—such as
+   `ArticleComponent` and **Favorite Article**—does not prove that the control
+   changed.
+5. **No LLM fallback:** weak matches remain unmapped and are surfaced for review.
 
 The verified sample run uses the third method for `AuthComponent`; its report
-therefore downgrades the path confidence and calls out the file-scope mapping.
-In production, the first three heuristics should be replaced by a TypeScript
-LSP import-chain traversal.
+therefore labels Sign in/Sign up as candidate mappings, downgrades confidence,
+and requires QA confirmation. `ArticleComponent`'s deletion change remains an
+unmapped protected-path risk because the public crawl did not observe an
+author-only delete control. In production, the first three heuristics should
+be replaced by a TypeScript LSP import-chain traversal.
 
 ### Verified narrow-slice run
 
@@ -498,7 +504,7 @@ immutable head `fc4380310755babb0d8c2021420d5b3e860b890c`.
 | Code files / symbols | 7 / 5 |
 | PR changes / flows | 7 / 1 |
 | Requirement paths in report | 1 |
-| Unverified requirements | 1 (`REQ-003`) |
+| Unverified requirements | 2 (`REQ-002`, `REQ-003`) |
 
 The generated report is LOW confidence, intentionally: the one demonstrated
 path traverses an existing `AuthComponent` changed at file scope to

@@ -37,9 +37,9 @@ surfaces. It intentionally did not authenticate or execute destructive actions.
 
 ## Blast-Radius Result
 
-**Overall risk: LOW.** Neo4j found 58 browser-observed selector instances,
-grouped into four distinct impacted control labels, one affected observed flow,
-and one requirement at risk. The average impact-path confidence is about 49%:
+**Overall risk: LOW.** Neo4j found 50 browser-observed selector instances,
+grouped into two distinct impacted control labels, one affected observed flow,
+and one partially covered requirement at risk. The average impact-path confidence is about 42%:
 `AuthComponent` is connected to sign-in/sign-up controls through a deterministic
 file-path semantic match, not a direct template selector or test-ID link.
 
@@ -58,16 +58,21 @@ PR #350
 
 1. From the public home, article, and profile surfaces, open **Sign in** and
    **Sign up**; verify navigation and the displayed authentication form.
-2. On the public article surfaces, verify the observed **Favorite Article**
-   control; PR #350 also changes `article.component.ts`.
-3. Manually triage the five changed files without a verified browser mapping
-   (including settings, JWT, authenticated-directive, and configuration code).
+2. Manually test article deletion confirmation with an authorized author
+   account; the public crawl did not observe that protected control.
+3. Manually triage the six changed files without a verified browser mapping,
+   including article deletion, settings, JWT, authenticated-directive, and
+   configuration code.
 
 ### Known Coverage Limits
 
-- `REQ-003` (author-only article/comment deletion) is **UNVERIFIED**, not
-  absent: the bounded public crawl did not use an author account.
-- The report does not claim coverage of authenticated settings/logout behavior.
+- `REQ-001` is **PARTIAL**: sign-in/sign-up were observed, while authenticated
+  logout was not.
+- `REQ-002` (pagination and filtering) and `REQ-003` (author-only deletion)
+  are **UNVERIFIED**, not absent: the crawl did not prove every required
+  control or use an author account.
+- The report does not claim coverage of authenticated settings/logout behavior
+  or article deletion.
 - Repeated controls across pages are preserved as selector instances in the
   graph and grouped by the dashboard/report renderer for QA readability.
 

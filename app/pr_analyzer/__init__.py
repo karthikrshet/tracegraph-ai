@@ -27,6 +27,7 @@ from app.llm import LLMProvider, get_llm_provider
 from app.models import (
     BlastRadiusReport,
     ConfidenceTier,
+    CoverageStatus,
     ImpactedItem,
     PRChange,
     PullRequest,
@@ -53,6 +54,7 @@ def compute_path_confidence(
     req_testability: float = 0.90,
     change_type: str = "modified",
     code_mapping_method: str = "declaration_in_diff",
+    ui_mapping_method: str = "name_match",
 ) -> float:
     """
     Compute mathematically calibrated end-to-end confidence as product of hop weights.
@@ -70,7 +72,13 @@ def compute_path_confidence(
             if change_type in ("added", "deleted"):
                 weight = min(0.98, weight + 0.02)
         elif hop == "symbol_to_ui":
-            if symbol_name and ui_label:
+            if ui_mapping_method == "data_test_id_match":
+                weight = 0.95
+            elif ui_mapping_method == "auth_entry_semantic_match":
+                weight = 0.70
+            elif ui_mapping_method == "file_path_semantic_match":
+                weight = 0.65
+            elif symbol_name and ui_label:
                 s_clean = symbol_name.lower().replace("_", " ")
                 u_clean = ui_label.lower().replace("-", " ")
                 s_words = set(s_clean.split())
@@ -220,6 +228,7 @@ class PRAnalyzer:
                 is_component=bool(row.get("is_component", True)),
                 change_type=str(row.get("change_type", "modified")),
                 code_mapping_method=str(row.get("code_mapping_method", "declaration_in_diff")),
+                ui_mapping_method=str(row.get("ui_mapping_method", "name_match")),
             )
             evidence_chain = [
                 f"PR #{row.get('pr_number', '?')}",
@@ -234,6 +243,7 @@ class PRAnalyzer:
                 risk_level=_risk_level(confidence),
                 confidence=confidence,
                 confidence_tier=ConfidenceTier.from_score(confidence),
+                mapping_method=str(row.get("ui_mapping_method") or "unmapped"),
                 evidence_chain=evidence_chain,
                 raw_path=[
                     {"type": "PullRequest", "id": str(row.get("pr_number", ""))},
@@ -299,6 +309,7 @@ class PRAnalyzer:
                 is_component=bool(row.get("is_component", True)),
                 change_type=str(row.get("change_type", "modified")),
                 code_mapping_method=str(row.get("code_mapping_method", "declaration_in_diff")),
+                ui_mapping_method=str(row.get("ui_mapping_method", "name_match")),
             )
             evidence_chain = [
                 str(row.get("file_path", "?")),
@@ -314,6 +325,7 @@ class PRAnalyzer:
                 risk_level=_risk_level(confidence),
                 confidence=confidence,
                 confidence_tier=ConfidenceTier.from_score(confidence),
+                mapping_method=str(row.get("ui_mapping_method") or "unmapped"),
                 evidence_chain=evidence_chain,
             )
         return list(seen.values())
@@ -342,6 +354,7 @@ class PRAnalyzer:
                 req_testability=testability,
                 change_type=str(row.get("change_type", "modified")),
                 code_mapping_method=str(row.get("code_mapping_method", "declaration_in_diff")),
+                ui_mapping_method=str(row.get("ui_mapping_method", "name_match")),
             )
             evidence_chain = [
                 str(row.get("file_path", "?")),
@@ -358,6 +371,8 @@ class PRAnalyzer:
                 confidence=confidence,
                 confidence_tier=ConfidenceTier.from_score(confidence),
                 category=str(row.get("req_category") or "general"),
+                coverage_status=CoverageStatus(str(row.get("req_coverage_status") or "UNVERIFIED")),
+                mapping_method=str(row.get("ui_mapping_method") or "unmapped"),
                 evidence_chain=evidence_chain,
                 raw_path=[
                     {"type": "PullRequest", "id": str(row.get("pr_number", ""))},
@@ -498,6 +513,11 @@ class PRAnalyzer:
         files_str = ", ".join(f"`{f.split('/')[-1]}`" for f in changed_files[:4])
 
         avg_confidence = sum(item.confidence for item in ui) / len(ui) if ui else 0.0
+        heuristic_mappings = {
+            item.mapping_method
+            for item in ui
+            if item.mapping_method and item.mapping_method not in {"data_test_id_match", "name_match"}
+        }
         if changed_files and not ui and not flows and not reqs:
             qa_action = (
                 "No browser-observed UI, flow, or requirement path was verified from these code changes. "
@@ -510,13 +530,16 @@ class PRAnalyzer:
             )
         else:
             qa_action = "QA should run focused regression tests on the browser-observed interface elements above before deployment."
+            if heuristic_mappings:
+                qa_action += " These are candidate mappings; confirm the control-to-code relationship before treating them as direct functional coverage."
 
         return (
             f"### PR #{pr_number} Analysis: {pr_title}\n\n"
             f"**1. Code Modifications & Blast Radius:**\n"
             f"This pull request modifies {len(changed_files)} file(s) ({files_str}). "
             f"TraceGraph found **{len(ui)} browser-observed selector instance(s)** across "
-            f"**{len(ui_groups)} distinct UI control(s)** ({ui_list}) through deterministic, provenance-recorded mappings.\n\n"
+            f"**{len(ui_groups)} distinct UI control(s)** ({ui_list}) through deterministic, provenance-recorded mappings. "
+            f"{'The paths include heuristic mappings and require QA confirmation.' if heuristic_mappings else 'The paths use direct label or test-ID mappings.'}\n\n"
             f"**2. Impacted User Flows & Business Requirements:**\n"
             f"The changes affect {len(flows)} key user journey(s): {flow_names}. "
             f"Key product requirements at risk include: {req_list}. "
@@ -582,7 +605,10 @@ class PRAnalyzer:
         ]
         for item in sorted(report.impacted_ui_elements, key=lambda x: -x.confidence):
             chain = " → ".join(item.evidence_chain[-3:])
-            lines.append(f"| {item.label} | {item.risk_level} | {item.confidence:.0%} | {chain} |")
+            lines.append(
+                f"| {item.label} | {item.risk_level} | {item.confidence:.0%} | "
+                f"{chain} ({item.mapping_method or 'unmapped'}) |"
+            )
 
         lines += [
             "",
@@ -602,12 +628,13 @@ class PRAnalyzer:
             "",
             "## 📋 Affected Requirements",
             "",
-            "| Requirement ID | Description | Risk | Confidence |",
-            "|----------------|-------------|------|------------|",
+            "| Requirement ID | Description | Coverage | Risk | Confidence |",
+            "|----------------|-------------|----------|------|------------|",
         ]
         for item in sorted(report.impacted_requirements, key=lambda x: -x.confidence):
             lines.append(
-                f"| {item.item_id} | {item.label[:60]}... | {item.risk_level} | {item.confidence:.0%} |"
+                f"| {item.item_id} | {item.label[:60]}... | {item.coverage_status or 'UNVERIFIED'} | "
+                f"{item.risk_level} | {item.confidence:.0%} |"
             )
 
         lines += [

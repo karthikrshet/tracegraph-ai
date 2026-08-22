@@ -250,6 +250,8 @@ class ImpactedItem(BaseModel):
     confidence: float
     confidence_tier: ConfidenceTier
     category: str | None = None
+    coverage_status: CoverageStatus | None = None
+    mapping_method: str | None = None
     evidence_chain: list[
         str
     ]  # human-readable path e.g. ["PR#6857", "DropdownRow.tsx", "Add to Cart"]
