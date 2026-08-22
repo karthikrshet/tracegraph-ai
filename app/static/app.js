@@ -349,7 +349,7 @@ function initSpecIngestControls() {
         document.getElementById("specCategoriesDisplay").innerText = (data.categories || []).join(", ") || "—";
         await loadIngestedRequirements();
       } catch (err) {
-        document.getElementById("specSourceBadge").innerText = `Ingestion failed; existing evidence retained: ${err.message}`;
+        document.getElementById("specSourceBadge").innerText = `Ingestion failed — existing evidence was not changed: ${err.message}`;
         document.getElementById("specSourceBadge").className = "badge badge-danger";
       } finally {
         btnIngest.disabled = false;
@@ -1092,6 +1092,7 @@ function setAnalysisUnavailable(reason) {
   document.getElementById("llmEngineBadge").className = "badge badge-unverified";
   document.getElementById("llmExecutiveSummary").innerText = `No blast-radius claim was generated. ${reason} Build the graph from the selected PR, a completed crawl, and ingested requirements.`;
   document.getElementById("qaRecContent").innerText = "Crawl the application, ingest its product specification, then build the Neo4j graph before reviewing blast radius.";
+  renderQAGuidance(null, reason);
   setTableMessage("#tableImpactedUI tbody", 5, "No report available — no UI impact claim has been made.");
   setTableMessage("#tableImpactedFlows tbody", 4, "No report available — no affected-flow claim has been made.");
   setTableMessage("#tableImpactedReqs tbody", 5, "No report available — no requirement-risk claim has been made.");
@@ -1127,6 +1128,51 @@ function groupEquivalentUIImpacts(items) {
   return [...groups.values()];
 }
 
+function renderQAGuidance(report, unavailableReason = "") {
+  const container = document.getElementById("qaGuidanceContent");
+  if (!container) return;
+
+  if (!report) {
+    container.innerHTML = `<p class="text-muted">No QA handoff is available yet. ${escapeHtml(unavailableReason || "Select a completed evidence run.")}</p>`;
+    return;
+  }
+
+  const uiGroups = groupEquivalentUIImpacts(report.impacted_ui_elements || []);
+  const controls = uiGroups.map(group => group.baseLabel).filter(Boolean);
+  const heuristicGroups = uiGroups.filter(group =>
+    ["auth_entry_semantic_match", "file_path_semantic_match"].includes(group.item.mapping_method)
+  );
+  const mappedFiles = new Set((report.impacted_ui_elements || []).flatMap(item =>
+    (item.raw_path || [])
+      .filter(node => node.type === "CodeFile" && node.id)
+      .map(node => node.id)
+  ));
+  const unmappedFiles = (report.changed_files || []).filter(file => !mappedFiles.has(file));
+  const coverageGaps = (report.absent_requirements || []).filter(Boolean);
+
+  const observedHtml = controls.length
+    ? `<strong>Test first:</strong> ${escapeHtml(controls.slice(0, 4).join(", "))}${controls.length > 4 ? ` + ${controls.length - 4} more` : ""}.`
+    : "<strong>No direct UI control was mapped.</strong> Start with changed-file review before scheduling UI regression.";
+  const mappingHtml = heuristicGroups.length
+    ? `<strong>Confirm mapping:</strong> ${heuristicGroups.length} control group${heuristicGroups.length === 1 ? " is" : "s are"} semantic candidates, not direct selector-to-code proof.`
+    : "<strong>Mapping strength:</strong> mapped controls have direct graph evidence.";
+  const triageHtml = unmappedFiles.length
+    ? `<strong>Human triage:</strong> ${unmappedFiles.length} changed file${unmappedFiles.length === 1 ? " has" : "s have"} no verified UI route; inspect service, configuration, and protected-path effects.`
+    : "<strong>Human triage:</strong> every changed file has at least one UI path in this run.";
+  const coverageHtml = coverageGaps.length
+    ? `<strong>Not proven by this crawl:</strong> ${escapeHtml(coverageGaps.join(", "))}. Do not mark these requirements covered without a broader or authorized crawl.`
+    : "<strong>Requirement coverage:</strong> no unresolved coverage gaps were reported for this run.";
+
+  container.innerHTML = `
+    <ul class="qa-guidance-list">
+      <li>${observedHtml}</li>
+      <li>${mappingHtml}</li>
+      <li>${triageHtml}</li>
+      <li>${coverageHtml}</li>
+    </ul>
+  `;
+}
+
 function renderBlastRadiusReport(report) {
   // Populate Live AI Executive Summary
   const summaryEl = document.getElementById("llmExecutiveSummary");
@@ -1152,6 +1198,7 @@ function renderBlastRadiusReport(report) {
   if (recEl && report.recommendation) {
     recEl.innerText = report.recommendation;
   }
+  renderQAGuidance(report);
 
   // Populate UI table
   const uiTbody = document.querySelector("#tableImpactedUI tbody");

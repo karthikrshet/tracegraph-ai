@@ -77,7 +77,7 @@ summary is unavailable.
 
 `GET /api/agents` exposes the authority, tools, deterministic boundary, and human-escalation rule for every pipeline stage. After a report and a completed crawl exist, `GET /api/qa-analysis/<pr>?crawl_id=<id>` performs a second deterministic verification pass. It checks the exact graph-path shape, that every referenced UI element belongs to the selected crawl, that its page still has both captured DOM and screenshot artifacts, and that a test step corresponds to an observed transition.
 
-The dashboard's **QA Intelligence** tab renders only those checks. A claim with missing artifacts is `REJECTED`; a valid path below 0.50 confidence is `NEEDS_REVIEW`; only a verified path with a browser-observed transition can become an `APPROVED` test. It never produces a generic fallback checklist, synthetic test case, or ungrounded success state.
+The dashboard's **QA Intelligence** tab renders only those checks. A claim with missing artifacts is `REJECTED`; a valid path below 0.50 confidence is `NEEDS_REVIEW`; only a verified path with a browser-observed transition can become an `APPROVED` test. It never produces a generic fallback checklist, synthetic test case, or ungrounded success state. The sidebar's **QA Guidance Assistant** is a concise handoff for a QA lead: it lists the observed candidate controls, semantic mappings that need confirmation, changed files with no UI route, and unresolved requirement IDs. It is a deterministic rendering of the selected report, not a chat response or a new source of evidence.
 
 ## Complete local runbook
 

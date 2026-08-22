@@ -398,6 +398,34 @@ input[type="text"]:focus, input[type="number"]:focus {
   line-height: 1.45;
 }
 
+.qa-guidance-card {
+  border-left: 3px solid var(--color-cyan);
+}
+
+.qa-guidance-intro {
+  margin: -2px 0 10px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.42;
+}
+
+.qa-guidance-body {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.qa-guidance-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 17px;
+}
+
+.qa-guidance-list li::marker {
+  color: var(--color-cyan);
+}
+
 /* ── Workspace ───────────────────────────────────────────── */
 .workspace {
   display: flex;

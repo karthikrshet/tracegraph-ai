@@ -19,6 +19,7 @@ import logging
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -85,47 +86,68 @@ class RequirementIngestor:
     ) -> list[Requirement]:
         """Fetch only explicitly selected, allowlisted docs and extract requirements."""
         results: list[Requirement] = []
+        failures: list[str] = []
         counter = start_id
         settings = get_settings()
 
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=False) as client:
             for url in source_urls[:5]:
-                validation = validate_crawl_url(url, allowed_hosts=settings.allowed_document_hosts)
+                canonical_url = self._canonical_document_url(url)
+                validation = validate_crawl_url(canonical_url, allowed_hosts=settings.allowed_document_hosts)
                 if not validation["valid"]:
                     raise ValueError(f"Documentation URL rejected: {validation['reason']}")
                 try:
-                    resp = await client.get(url)
+                    resp = await client.get(canonical_url)
                     if resp.is_redirect:
                         location = resp.headers.get("location")
                         if not location:
                             continue
                         from urllib.parse import urljoin
 
-                        url = urljoin(url, location)
-                        validation = validate_crawl_url(url, allowed_hosts=settings.allowed_document_hosts)
+                        canonical_url = urljoin(canonical_url, location)
+                        validation = validate_crawl_url(canonical_url, allowed_hosts=settings.allowed_document_hosts)
                         if not validation["valid"]:
                             raise ValueError(f"Redirected documentation URL rejected: {validation['reason']}")
-                        resp = await client.get(url)
+                        resp = await client.get(canonical_url)
                     if resp.status_code != 200:
-                        raise ValueError(f"Documentation source returned HTTP {resp.status_code}: {url}")
-                    text = self._extract_text(resp.text, url)
+                        raise ValueError(f"Documentation source returned HTTP {resp.status_code}: {canonical_url}")
+                    text = self._extract_text(resp.text, canonical_url)
                     if not text or len(text) < 100:
-                        raise ValueError(f"Documentation source had insufficient readable content: {url}")
+                        raise ValueError(f"Documentation source had insufficient readable content: {canonical_url}")
 
                     reqs = await self._extract_requirements_llm(
-                        text[:6000], self._infer_category(url), url, start_id=counter
+                        text[:6000], self._infer_category(canonical_url), canonical_url, start_id=counter
                     )
                     for requirement in reqs:
                         requirement.source_text = text[:1000]
                     results.extend(reqs)
                     counter += len(reqs)
                 except Exception as e:
-                    logger.warning("Failed to ingest selected source %s: %s", url, e)
+                    logger.warning("Failed to ingest selected source %s: %s", canonical_url, e)
+                    failures.append(f"{canonical_url}: {e}")
 
         if not results:
-            raise ValueError("No testable requirements were extracted from the selected documentation sources.")
+            detail = failures[0] if failures else "no content was returned"
+            raise ValueError(f"No testable requirements were extracted from the selected documentation source: {detail}")
 
         return results
+
+    @staticmethod
+    def _canonical_document_url(url: str) -> str:
+        """Safely normalize a GitHub blob/raw README link to its raw content URL.
+
+        Operators commonly paste the browser URL shown by GitHub.  Fetching the
+        canonical raw file avoids HTML chrome and works without special-case
+        repository data.  Other allowlisted documentation URLs are unchanged.
+        """
+        parsed = urlparse(url.strip())
+        if parsed.hostname not in {"github.com", "www.github.com"}:
+            return url.strip()
+        parts = [part for part in parsed.path.split("/") if part]
+        if len(parts) >= 5 and parts[2] in {"blob", "raw"}:
+            owner, repository, _view, ref, *path_parts = parts
+            return f"https://raw.githubusercontent.com/{owner}/{repository}/{ref}/{'/'.join(path_parts)}"
+        return url.strip()
 
     @staticmethod
     def _infer_category(url: str) -> str:

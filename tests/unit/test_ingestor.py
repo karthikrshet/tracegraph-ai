@@ -112,6 +112,20 @@ def test_coverage_status_default():
     assert req.coverage_status == CoverageStatus.UNVERIFIED
 
 
+def test_github_blob_url_is_canonicalized_to_raw_content():
+    """Browser GitHub README links should be ingestion-ready without manual rewriting."""
+    url = "https://github.com/owner/repository/blob/main/docs/README.md"
+
+    assert RequirementIngestor._canonical_document_url(url) == (
+        "https://raw.githubusercontent.com/owner/repository/main/docs/README.md"
+    )
+
+
+def test_non_github_document_url_is_not_rewritten():
+    url = "https://docs.example.com/product/requirements"
+    assert RequirementIngestor._canonical_document_url(url) == url
+
+
 @pytest.mark.asyncio
 async def test_ingestion_rejects_missing_sources(mock_ingestor):
     """The pipeline must not invent requirements when no source was supplied."""

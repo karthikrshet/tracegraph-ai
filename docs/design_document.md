@@ -90,6 +90,7 @@ Stage 6: Hop-Weight Confidence Model    → DETERMINISTIC (monotonically decreas
 Stage 7: Non-Engineer Blast Report      → LLM (narrates already-determined graph facts)
 Stage 8: QA Evidence Verification        → DETERMINISTIC (path + artifact + transition checks)
 Stage 9: Reviewer-ready Test Planning    → DETERMINISTIC template over verified transitions
+Stage 10: QA Guidance Handoff             → DETERMINISTIC rendering of report gaps and review actions
 ```
 
 ### Why This Decomposition Matters
@@ -121,6 +122,7 @@ Every single impact claim is an auditable, reproducible graph path.
 | Executive Summary & Narrative | | ✅ | Explains already-computed graph paths in natural language |
 | QA Evidence Verification | ✅ | | Rejects claims whose graph path, crawl element, page DOM, or screenshot is missing |
 | Test Generation & Review | ✅ | | Emits a test only for a verified browser-observed transition; low confidence remains `NEEDS_REVIEW` |
+| QA Guidance Handoff | ✅ | | Restates observed controls, heuristic mappings, unmapped files, and coverage gaps; it cannot add an impact claim |
 
 ### 3.1 QA intelligence is a gate, not a second source of truth
 

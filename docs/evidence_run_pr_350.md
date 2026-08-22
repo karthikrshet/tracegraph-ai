@@ -66,12 +66,13 @@ PR #350
 
 ### Known Coverage Limits
 
-- `REQ-001` is **PARTIAL**: sign-in/sign-up were observed, while authenticated
-  logout was not.
+- `REQ-001` is **PARTIAL**: sign-in/sign-up were observed, while the README's
+  post-authentication JWT/session-persistence behavior cannot be verified from
+  this unauthenticated public crawl.
 - `REQ-002` (pagination and filtering) and `REQ-003` (author-only deletion)
   are **UNVERIFIED**, not absent: the crawl did not prove every required
   control or use an author account.
-- The report does not claim coverage of authenticated settings/logout behavior
+- The report does not claim coverage of authenticated settings/session behavior
   or article deletion.
 - Repeated controls across pages are preserved as selector instances in the
   graph and grouped by the dashboard/report renderer for QA readability.
