@@ -190,6 +190,13 @@ async def ingest_requirements(req: IngestRequest) -> dict[str, Any]:
     }
 
 
+@app.get("/api/config/document-sources", dependencies=[Depends(require_api_auth)])
+async def get_document_source_policy() -> dict[str, Any]:
+    """Expose the safe public documentation hosts used by the URL ingestion UI."""
+    settings = get_settings()
+    return {"allowed_hosts": settings.allowed_document_hosts}
+
+
 class ValidateUrlRequest(BaseModel):
     url: str
     allow_custom_public_host: bool = True

@@ -53,6 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initPRControls();
   loadInitialData();
   loadIngestedRequirements();
+  loadDocumentSourcePolicy();
   setAnalysisUnavailable("No provenance-verified report has been loaded.");
 });
 
@@ -176,15 +177,21 @@ function initCrawlControls() {
 // 2.5 Specification Ingestion Controls (Step 2)
 // ─────────────────────────────────────────────────────────────
 function initSpecIngestControls() {
+  const sourceModeInputs = document.querySelectorAll("input[name='specSourceMode']");
+  sourceModeInputs.forEach(input => input.addEventListener("change", syncSpecSourceMode));
+  syncSpecSourceMode();
+
   const btnIngest = document.getElementById("btnIngestSpec");
   if (btnIngest) {
     btnIngest.addEventListener("click", async () => {
       btnIngest.disabled = true;
       btnIngest.innerText = "Ingesting...";
       try {
-        const sourceUrl = document.getElementById("inputSpecUrl").value.trim();
-        const sourceText = document.getElementById("specTextInput").value.trim();
-        if (!sourceUrl && !sourceText) throw new Error("Enter an allowed public documentation URL or paste a specification.");
+        const sourceMode = document.querySelector("input[name='specSourceMode']:checked")?.value;
+        const sourceUrl = sourceMode === "url" ? document.getElementById("inputSpecUrl").value.trim() : "";
+        const sourceText = sourceMode === "text" ? document.getElementById("specTextInput").value.trim() : "";
+        if (sourceMode === "url" && !sourceUrl) throw new Error("Paste a public GitHub README or documentation URL.");
+        if (sourceMode === "text" && !sourceText) throw new Error("Paste the requirement text to extract requirements.");
         const res = await fetch("/api/ingest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -206,6 +213,35 @@ function initSpecIngestControls() {
         lucide.createIcons();
       }
     });
+  }
+}
+
+function syncSpecSourceMode() {
+  const sourceMode = document.querySelector("input[name='specSourceMode']:checked")?.value || "url";
+  const urlGroup = document.getElementById("specUrlGroup");
+  const textGroup = document.getElementById("specTextGroup");
+  const urlInput = document.getElementById("inputSpecUrl");
+  const textInput = document.getElementById("specTextInput");
+  const useUrl = sourceMode === "url";
+  urlGroup?.classList.toggle("hidden", !useUrl);
+  textGroup?.classList.toggle("hidden", useUrl);
+  if (urlInput) urlInput.disabled = !useUrl;
+  if (textInput) textInput.disabled = useUrl;
+}
+
+async function loadDocumentSourcePolicy() {
+  const target = document.getElementById("specUrlPolicy");
+  if (!target) return;
+  try {
+    const response = await fetch("/api/config/document-sources");
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Source policy is unavailable.");
+    const hosts = (data.allowed_hosts || []).map(escapeHtml);
+    target.innerText = hosts.length
+      ? `Approved URL hosts: ${hosts.join(", ")}.`
+      : "No public documentation hosts are configured.";
+  } catch (_) {
+    target.innerText = "URL policy is unavailable. Paste the requirement text instead.";
   }
 }
 

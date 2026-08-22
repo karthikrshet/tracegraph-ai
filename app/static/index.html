@@ -394,25 +394,32 @@
           <div class="report-content">
             <div class="panel-header">
               <div>
-                <h2>② Ingest Product Specification & PRD</h2>
-                <p class="panel-subtitle">Parse public PRD, README, feature documentation, or JSON specs into structured, testable Requirements with testability scoring.</p>
+                <h2>Ingest Product Requirements</h2>
+                <p class="panel-subtitle">Choose one source: a public README/documentation URL or pasted requirement text. The system extracts testable product requirements.</p>
               </div>
             </div>
 
             <div class="card" style="margin-bottom: 20px;">
               <div class="card-title">
                 <i data-lucide="file-input" class="icon-sm text-cyan"></i>
-                <span>Specification Source</span>
+                  <span>Choose a Requirement Source</span>
               </div>
               <div class="spec-ingest-grid">
                 <div>
-                  <div class="form-group">
-                    <label for="inputSpecUrl">Documentation / PRD URL</label>
-                    <input type="url" id="inputSpecUrl" placeholder="https://docs.example.com/feature">
+                  <p class="text-muted" style="font-size: 0.82rem; margin: 0 0 12px;">Use one option only. A URL is fetched from an approved public documentation host; pasted text stays in this request.</p>
+                  <div role="radiogroup" aria-label="Requirement source" style="display: flex; gap: 16px; margin-bottom: 14px;">
+                    <label class="toggle-item"><input type="radio" name="specSourceMode" value="url" checked><span>Public GitHub README / documentation URL</span></label>
+                    <label class="toggle-item"><input type="radio" name="specSourceMode" value="text"><span>Paste Markdown / requirement text</span></label>
                   </div>
-                  <div class="form-group">
-                    <label>Or Paste Markdown / PRD Text</label>
-                    <textarea id="specTextInput" class="spec-textarea" placeholder="# Product Requirements&#10;REQ-001: Users can browse product listings and view details..."></textarea>
+                  <div class="form-group" id="specUrlGroup">
+                    <label for="inputSpecUrl">Public documentation URL</label>
+                    <input type="url" id="inputSpecUrl" placeholder="https://github.com/owner/repository/blob/main/README.md" autocomplete="url">
+                    <small class="text-muted" id="specUrlPolicy">Loading approved documentation hosts…</small>
+                  </div>
+                  <div class="form-group hidden" id="specTextGroup">
+                    <label for="specTextInput">Paste Markdown or requirement text</label>
+                    <textarea id="specTextInput" class="spec-textarea" placeholder="# Product requirements&#10;&#10;Users can upload a file and download a sanitized result."></textarea>
+                    <small class="text-muted">Use this option for documentation outside the approved URL list. File uploads are intentionally not accepted here; paste the relevant text instead.</small>
                   </div>
                   <div style="display: flex; gap: 10px; margin-top: 10px;">
                     <button class="btn btn-primary" id="btnIngestSpec">
@@ -428,14 +435,14 @@
                     <div style="background: var(--bg-input); border: 1px solid var(--border-subtle); padding: 14px; border-radius: var(--radius-sm); font-size: 0.84rem; line-height: 1.6;">
                       <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                         <span>Requirements Extracted:</span>
-                        <strong id="ingestCountDisplay" class="text-cyan">Not ingested</strong>
+                        <strong id="ingestCountDisplay" class="text-cyan">No source selected</strong>
                       </div>
                       <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
                         <span>Provenance Mode:</span>
-                        <span class="badge badge-unverified" id="specSourceBadge">Awaiting public source</span>
+                        <span class="badge badge-unverified" id="specSourceBadge">Awaiting source</span>
                       </div>
                       <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span>Categories:</span>
+                        <span>Inferred category:</span>
                         <span id="specCategoriesDisplay" style="color: var(--text-secondary);">—</span>
                       </div>
                       <div style="display: flex; justify-content: space-between;">
