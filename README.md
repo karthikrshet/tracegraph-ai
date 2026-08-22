@@ -154,30 +154,7 @@ python scripts/run_pipeline.py \
   --spec-url https://docs.example.com/feature
 ```
 
-### Verified public evaluation profiles
-
-The dashboard exposes the same profiles under **Verified public evaluation
-profile**. Selecting one fills the target URL, README URL, repository, and PR
-number only. It does **not** load seeded requirements, screenshots, graph
-nodes, reports, or mock PR output. Run one profile at a time because the Neo4j
-index intentionally represents one explicit evidence run.
-
-| Profile | Live application | Repository / real PR | Public README | Important constraint |
-|---|---|---|---|---|
-| Conduit (Angular) | `https://demo.realworld.show/` | `realworld-apps/angular-realworld-example-app` [PR #350](https://github.com/realworld-apps/angular-realworld-example-app/pull/350) | `https://raw.githubusercontent.com/realworld-apps/angular-realworld-example-app/main/README.md` | Recommended recorded assignment run; public pages are crawlable. |
-| React Admin | `https://marmelab.com/react-admin-demo/` | `marmelab/react-admin` [PR #11339](https://github.com/marmelab/react-admin/pull/11339) | `https://raw.githubusercontent.com/marmelab/react-admin/master/README.md` | Current demo is not a historical PR preview; an unmatched code/UI path remains `UNVERIFIED`. |
-| Cal.com | `https://app.cal.com/` | `calcom/cal.diy` [PR #14000](https://github.com/calcom/cal.diy/pull/14000) | `https://raw.githubusercontent.com/calcom/cal.diy/main/README.md` | Public crawl reaches login only; organisation features require an authorized test account. |
-
-All three PRs and URLs were verified through GitHub's public API and live HTTP
-responses on 2026-08-23. Their code, deployment, or product state can change;
-each fresh run records its own immutable PR head SHA and browser artifacts.
-
-For a shell run, add the selected host to `ALLOWED_CRAWL_DOMAINS` in `.env`.
-For example, set `ALLOWED_CRAWL_DOMAINS=marmelab.com` before the React Admin
-run. `raw.githubusercontent.com` remains an allowed documentation host by
-default.
-
-The originally documented, real reference combination is:
+The currently documented, real reference combination is:
 
 - Application: `https://demo.realworld.show/`
 - Repository: `realworld-apps/angular-realworld-example-app`
@@ -208,28 +185,6 @@ python scripts/run_pipeline.py `
   --pr 350 `
   --crawl-url https://demo.realworld.show/ `
   --spec-url https://raw.githubusercontent.com/realworld-apps/angular-realworld-example-app/main/README.md
-```
-
-React Admin example (run only after changing the one crawl-host allowlist in
-`.env` to `marmelab.com`):
-
-```powershell
-python scripts/run_pipeline.py `
-  --repo marmelab/react-admin `
-  --pr 11339 `
-  --crawl-url https://marmelab.com/react-admin-demo/ `
-  --spec-url https://raw.githubusercontent.com/marmelab/react-admin/master/README.md
-```
-
-Cal.com example (run only after changing the one crawl-host allowlist in
-`.env` to `app.cal.com`):
-
-```powershell
-python scripts/run_pipeline.py `
-  --repo calcom/cal.diy `
-  --pr 14000 `
-  --crawl-url https://app.cal.com/ `
-  --spec-url https://raw.githubusercontent.com/calcom/cal.diy/main/README.md
 ```
 
 ### 6. Use the dashboard workflow

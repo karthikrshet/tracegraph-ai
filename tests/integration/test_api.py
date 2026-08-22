@@ -55,20 +55,6 @@ def test_health_endpoint(client):
     assert "target_pr" in data
 
 
-def test_example_profiles_are_real_configuration_only(client):
-    """Profiles are selectable public inputs, never seed evidence or reports."""
-    response = client.get("/api/example-profiles")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["count"] == 3
-    profiles = {profile["id"]: profile for profile in data["profiles"]}
-    assert profiles["realworld-angular-pr-350"]["repository"] == "realworld-apps/angular-realworld-example-app"
-    assert profiles["react-admin-pr-11339"]["application_url"] == "https://marmelab.com/react-admin-demo/"
-    assert profiles["calcom-pr-14000"]["pr_number"] == 14000
-    assert "fills inputs only" in data["notice"].lower()
-
-
 def test_agent_contracts_are_exposed_without_claiming_runtime_success(client):
     """Agent metadata documents authority; it is not a fabricated execution result."""
     response = client.get("/api/agents")

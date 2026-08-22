@@ -52,20 +52,6 @@ And the system's response is not an LLM opinion — it's a graph path.
 |----|------|-------|--------------------|
 | observed-crawl-350 | Public authentication navigation | `/` → `/login` → `/register` | REQ-001 |
 
-### 2.5 Additional Public-Input Checks (Not Claimed Evidence Runs)
-
-The dashboard offers two additional, verified public configuration profiles:
-React Admin PR #11339 and Cal.com PR #14000. They exist to demonstrate that
-the input contract is not hard-coded to Conduit. Selecting one only fills its
-live URL, README URL, repository, and real PR number. It does not preload a
-crawl, requirement set, graph, or report.
-
-They are intentionally **not** presented as completed assignment runs. The
-public React Admin deployment is a current demo rather than a historical PR
-preview, and the Cal.com feature needs an authenticated organization account.
-For either profile, missing cross-layer evidence must resolve to `UNVERIFIED`
-or human review. The submitted deep slice remains the Conduit triplet above.
-
 ---
 
 ## 3. Agent Decomposition

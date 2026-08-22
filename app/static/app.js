@@ -8,7 +8,6 @@ let currentReport = null;
 let currentCrawlId = null;
 let crawlEventSource = null;
 let crawlTimerInterval = null;
-let exampleProfiles = [];
 
 function fitKnowledgeGraph(animated = true) {
   if (!network) return false;
@@ -55,65 +54,11 @@ document.addEventListener("DOMContentLoaded", () => {
   initSpecIngestControls();
   initPRControls();
   initQAControls();
-  initExampleProfiles();
   loadInitialData();
   loadIngestedRequirements();
   loadDocumentSourcePolicy();
   setAnalysisUnavailable("No provenance-verified report has been loaded.");
 });
-
-// ─────────────────────────────────────────────────────────────
-// 0. Verified public evaluation profiles
-// ─────────────────────────────────────────────────────────────
-async function initExampleProfiles() {
-  const select = document.getElementById("exampleProfileSelect");
-  if (!select) return;
-
-  select.addEventListener("change", () => applyExampleProfile(select.value));
-  try {
-    const res = await fetch("/api/example-profiles");
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Could not load evaluation profiles.");
-    exampleProfiles = Array.isArray(data.profiles) ? data.profiles : [];
-    exampleProfiles.forEach(profile => {
-      const option = document.createElement("option");
-      option.value = profile.id;
-      option.textContent = profile.name;
-      select.appendChild(option);
-    });
-  } catch (err) {
-    const help = document.getElementById("exampleProfileHelp");
-    if (help) help.textContent = `Profiles unavailable: ${err.message}`;
-  }
-}
-
-function applyExampleProfile(profileId) {
-  const profile = exampleProfiles.find(item => item.id === profileId);
-  if (!profile) return;
-
-  const assign = (id, value) => {
-    const element = document.getElementById(id);
-    if (element) element.value = value;
-  };
-  assign("inputRepo", profile.repository);
-  assign("inputPRNumber", profile.pr_number);
-  assign("inputCrawlUrl", profile.application_url);
-  assign("inputSpecUrl", profile.documentation_url);
-
-  const help = document.getElementById("exampleProfileHelp");
-  if (help) {
-    help.textContent = `${profile.constraints} Select Run Live Crawl and Ingest & Extract Requirements to create a new evidence run.`;
-  }
-  const urlMessage = document.getElementById("urlValidationMsg");
-  if (urlMessage) {
-    urlMessage.textContent = "Profile selected. Validate the URL before starting a crawl.";
-    urlMessage.className = "url-validation-feedback";
-  }
-  const headerRepo = document.getElementById("headerRepo");
-  const headerPR = document.getElementById("headerPR");
-  if (headerRepo) headerRepo.textContent = profile.repository;
-  if (headerPR) headerPR.textContent = `#${profile.pr_number}`;
-}
 
 // ─────────────────────────────────────────────────────────────
 // 1. Tab & Pipeline Step Navigation

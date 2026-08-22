@@ -37,8 +37,6 @@ Thumbs.db
 
 # Test artifacts
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
 .coverage
 htmlcov/
 

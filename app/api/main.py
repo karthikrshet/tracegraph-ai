@@ -33,7 +33,6 @@ from app.code_analyzer import CodeAnalyzer
 from app.config import get_settings
 from app.crawler.security import validate_crawl_url
 from app.crawler.session_manager import CrawlConfiguration, CrawlSessionManager
-from app.example_profiles import list_example_profiles
 from app.graph import GraphBuilder, GraphUnavailableError
 from app.ingestor import RequirementIngestor
 from app.llm import MockLLMProvider, get_llm_provider
@@ -175,20 +174,6 @@ async def health() -> dict[str, str]:
         "status": "ok",
         "target_repo": settings.target_repo,
         "target_pr": str(settings.target_pr),
-    }
-
-
-@app.get("/api/example-profiles", dependencies=[Depends(require_api_auth)])
-async def get_example_profiles() -> dict[str, Any]:
-    """Return verified public configuration shortcuts for manual evaluation.
-
-    This endpoint deliberately returns configuration only. It never makes a
-    profile appear as an already crawled, ingested, or graph-indexed run.
-    """
-    return {
-        "profiles": [profile.model_dump(mode="json") for profile in list_example_profiles()],
-        "count": len(list_example_profiles()),
-        "notice": "Selecting a profile fills inputs only; run crawl, ingestion, graph build, and analysis separately for fresh evidence.",
     }
 
 
