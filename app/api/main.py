@@ -523,10 +523,19 @@ async def build_graph(req: BuildGraphRequest) -> dict[str, Any]:
     repo = req.repo or settings.target_repo
     pr_number = req.pr_number or settings.target_pr
     analyzer = CodeAnalyzer(github_token=settings.github_token, data_dir=data_dir)
+    code_evidence_source = "github_api"
     try:
         code_data = await analyzer.run(repo, pr_number)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Could not retrieve immutable GitHub evidence: {exc}") from exc
+        # GitHub public API limits are operational failures, not a reason to
+        # discard a previously retrieved immutable PR revision. The cache is
+        # namespaced by the exact owner/repository and PR number; if it is
+        # missing or incomplete we still fail closed.
+        code_data = CodeAnalyzer.load_from_disk(data_dir, repo=repo, pr_number=pr_number)
+        if not code_data.get("pr") or not code_data.get("changes") or not code_data.get("code_files"):
+            raise HTTPException(status_code=502, detail=f"Could not retrieve immutable GitHub evidence: {exc}") from exc
+        code_evidence_source = "persisted_immutable_cache"
+        logger.warning("Using persisted immutable GitHub evidence for %s PR #%s after retrieval failed: %s", repo, pr_number, exc)
     pr = code_data.get("pr")
     changes = code_data.get("changes", [])
     code_files = code_data.get("code_files", [])
@@ -539,6 +548,14 @@ async def build_graph(req: BuildGraphRequest) -> dict[str, Any]:
         description="A bounded, browser-observed crawl path. Requirements are linked only through observed UI coverage.",
         steps=[page.id for page in crawl.pages],
     )
+    # The crawl records page order independently of a named product flow.
+    # For this single, bounded exploration run, attach each observed page to
+    # the explicit flow before graph loading. This creates evidence-backed
+    # Page → UserFlow edges without inventing any page or transition.
+    flow_pages = [
+        page.model_copy(update={"flow_id": observed_flow.id, "step_order": index})
+        for index, page in enumerate(crawl.pages, start=1)
+    ]
     graph = get_graph()
     try:
         if not graph.available:
@@ -546,7 +563,7 @@ async def build_graph(req: BuildGraphRequest) -> dict[str, Any]:
         counts = graph.build_graph(
             requirements=requirements,
             flows=[observed_flow],
-            pages=crawl.pages,
+            pages=flow_pages,
             elements=crawl.elements,
             transitions=crawl.transitions,
             code_files=code_files,
@@ -554,7 +571,13 @@ async def build_graph(req: BuildGraphRequest) -> dict[str, Any]:
             pr=pr,
             changes=changes,
         )
-        return {"status": "ok", "mode": "neo4j", "crawl_id": crawl.id, "node_counts": counts}
+        return {
+            "status": "ok",
+            "mode": "neo4j",
+            "crawl_id": crawl.id,
+            "code_evidence_source": code_evidence_source,
+            "node_counts": counts,
+        }
     except GraphUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     finally:
@@ -586,6 +609,11 @@ async def analyze_pr(
     try:
         if not graph.available:
             raise HTTPException(status_code=503, detail="Neo4j is unavailable; refusing to produce an ungrounded report.")
+        if not graph.query_blast_radius(pr_number, repo=target_repo):
+            raise HTTPException(
+                status_code=409,
+                detail="No PR-change evidence exists in the active graph for this repository and PR. Re-index the matching completed crawl before requesting a report.",
+            )
         pr_analyzer = PRAnalyzer(graph=graph, llm=llm, data_dir=settings.data_dir)
         report = await pr_analyzer.analyze(
             pr_number=pr_meta.number,

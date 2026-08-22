@@ -22,7 +22,7 @@ The prototype deliberately goes deep on provenance, safe collection, and determi
 
 - Crawl and document URLs are server-side allowlisted and DNS-resolved; loopback, private, link-local, metadata, and redirect-to-private targets are rejected. In development, the dashboard can explicitly approve the entered public hostname for that single crawl; it does not create a persistent or unrestricted allowlist entry. Production disables this option by default and requires authenticated API access before an operator enables `ALLOW_CUSTOM_CRAWL_HOSTS=true`.
 - Crawl budgets are server-enforced, navigation is same-domain, and destructive actions are filtered.
-- GitHub accepts only `owner/repository`, uses immutable PR head SHA for file retrieval, and fails closed on API errors.
+- GitHub accepts only `owner/repository` and uses the immutable PR head SHA for file retrieval. If GitHub is temporarily unavailable, it may reuse only a previously retrieved, namespaced immutable record for that exact repository and PR; otherwise it fails closed rather than substituting data.
 - Untrusted captured HTML is served as a downloadable text attachment with `nosniff`; it is never executed under the dashboard origin. Dashboard rendering escapes all crawl/report strings.
 - Cypher is parameterized internally. The exposed explorer accepts a single read-only `MATCH … RETURN` query and blocks mutation/procedure keywords.
 - Production mode requires `API_BEARER_TOKEN` for state-changing operations, uses explicit CORS origins, and requires a non-empty Neo4j password. Put the dashboard/API behind your normal authenticated reverse proxy before exposing read endpoints or captured artifacts.

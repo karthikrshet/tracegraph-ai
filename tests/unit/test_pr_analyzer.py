@@ -194,6 +194,31 @@ async def test_empty_paths_no_crash(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_analyze_retains_changed_code_without_a_requirement_path(tmp_path):
+    """A bounded crawl may miss UI coverage, but must not hide changed files."""
+    code_only_path = {
+        "file_path": "src/app/auth/auth.component.ts",
+        "change_type": "modified",
+        "changed_symbols": ["AuthComponent"],
+        "symbol_name": None,
+        "symbol_fqn": None,
+        "is_component": None,
+        "ui_element_id": None,
+        "flow_id": None,
+        "req_id": None,
+    }
+    analyzer = PRAnalyzer(graph=make_mock_graph([code_only_path]), llm=MockLLMProvider(), data_dir=tmp_path)
+
+    report = await analyzer.analyze(350, "Auth hardening", "https://github.com/example/repo/pull/350")
+
+    assert report.changed_files == ["src/app/auth/auth.component.ts"]
+    assert report.overall_risk == "NONE"
+    assert report.impacted_ui_elements == []
+    assert "Do not infer a focused browser regression suite" in report.summary
+    assert "1 changed file lacks a verified UI mapping" in report.recommendation
+
+
+@pytest.mark.asyncio
 async def test_metrics_populated(tmp_path):
     """Report metrics dict should be populated."""
     mock_graph = make_mock_graph(SAMPLE_PATHS)

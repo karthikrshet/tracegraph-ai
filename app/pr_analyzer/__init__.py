@@ -478,17 +478,19 @@ class PRAnalyzer:
         """Deterministic, domain-accurate blast-radius summary when LLM is unavailable."""
         flow_names = ", ".join(f"**{i.label}**" for i in flows) if flows else "None detected"
         req_list = ", ".join(f"`{i.item_id}` ({i.label})" for i in reqs[:3]) if reqs else "None detected"
-        ui_groups: dict[str, int] = {}
+        ui_groups: dict[str, tuple[str, int]] = {}
         for item in ui:
             # The persisted ImpactedItem keeps its route so QA can find the
             # exact selector.  A non-engineer summary should instead describe
             # the unique control and state how many observed instances it has.
             control = re.sub(r"\s+\([^)]*/[^)]*\)$", "", item.label).strip() or item.label
-            ui_groups[control] = ui_groups.get(control, 0) + 1
+            normalized_control = re.sub(r"\s+", " ", control).casefold()
+            display_label, count = ui_groups.get(normalized_control, (control, 0))
+            ui_groups[normalized_control] = (display_label, count + 1)
         ui_list = (
             ", ".join(
                 f"`{label}` ({count} observed {'selector' if count == 1 else 'selectors'})"
-                for label, count in list(ui_groups.items())[:4]
+                for label, count in list(ui_groups.values())[:4]
             )
             if ui_groups
             else "None detected"
@@ -496,6 +498,19 @@ class PRAnalyzer:
         files_str = ", ".join(f"`{f.split('/')[-1]}`" for f in changed_files[:4])
 
         avg_confidence = sum(item.confidence for item in ui) / len(ui) if ui else 0.0
+        if changed_files and not ui and not flows and not reqs:
+            qa_action = (
+                "No browser-observed UI, flow, or requirement path was verified from these code changes. "
+                "Do not infer a focused browser regression suite; review the unmapped changed files before release."
+            )
+        elif not changed_files:
+            qa_action = (
+                "No PR-change evidence was available in the active graph. "
+                "Re-index the matching crawl and pull request before making a QA decision."
+            )
+        else:
+            qa_action = "QA should run focused regression tests on the browser-observed interface elements above before deployment."
+
         return (
             f"### PR #{pr_number} Analysis: {pr_title}\n\n"
             f"**1. Code Modifications & Blast Radius:**\n"
@@ -507,7 +522,7 @@ class PRAnalyzer:
             f"Key product requirements at risk include: {req_list}. "
             f"Risk confidence arithmetic scores these paths at an average of **{(avg_confidence * 100):.0f}%** confidence based on concrete graph hops.\n\n"
             f"**3. Quality Assurance Action Plan:**\n"
-            f"QA teams should run focused regression tests on the affected interface elements before deployment to prevent user-facing regressions."
+            f"{qa_action}"
         )
 
     def _save_report(self, report: BlastRadiusReport) -> None:

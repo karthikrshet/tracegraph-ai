@@ -582,7 +582,12 @@ class GraphBuilder:
                 with self._driver.session() as session:
                     result = session.run(cypher, pr_number=pr_number)
                     rows = [dict(row) for row in result]
-                    if rows and any(r.get("req_id") for r in rows):
+                    # A PR/file row is itself immutable code evidence. Do not
+                    # discard it merely because the bounded crawl has not
+                    # established a downstream requirement link: doing so
+                    # would falsely report "0 changed files" and hide the
+                    # correct human-triage signal.
+                    if rows:
                         return rows
             except Exception as e:
                 logger.warning("Neo4j blast radius query failed (%s) — using dynamic graph traversal", e)

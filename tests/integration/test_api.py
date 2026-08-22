@@ -192,6 +192,69 @@ def test_ingest_endpoint(client):
     assert data["categories"] == ["product"]
 
 
+@pytest.mark.asyncio
+async def test_build_graph_uses_only_matching_persisted_pr_evidence_after_github_error(monkeypatch, tmp_path):
+    """Rate limiting may use the exact immutable cache, never invented code."""
+    import app.api.main as main_mod
+    from app.code_analyzer import CodeAnalyzer
+    from app.config import Settings
+    from app.crawler.session_manager import CrawlConfiguration, CrawlSession
+    from app.models import ChangeType, CodeFile, Page, PRChange, PullRequest, Requirement, UIElement
+
+    settings = Settings(data_dir=tmp_path)
+    crawl_id = "completed-crawl"
+    session = CrawlSession(
+        id=crawl_id,
+        start_url="https://demo.realworld.show/",
+        status="COMPLETED",
+        pages_discovered=1,
+        elements_discovered=1,
+        configuration=CrawlConfiguration(crawl_id=crawl_id, start_url="https://demo.realworld.show/"),
+        pages=[Page(id="home", url="https://demo.realworld.show/", title="Conduit")],
+        elements=[UIElement(id="sign-in", page_id="home", selector="a[href='/login']", label="Sign in", element_type="link")],
+    )
+
+    pr = PullRequest(number=350, title="Auth", author="test", head_sha="a" * 40, html_url="https://github.com/example/repo/pull/350")
+    change = PRChange(id="change-350-auth", pr_number=350, file_path="src/auth.ts", change_type=ChangeType.MODIFIED)
+    code_file = CodeFile(path="src/auth.ts", language="typescript")
+    prefix = "pr_realworld_apps_angular_realworld_example_app_350"
+    (tmp_path / f"{prefix}_metadata.json").write_text(pr.model_dump_json(), encoding="utf-8")
+    (tmp_path / f"{prefix}_changes.jsonl").write_text(change.model_dump_json() + "\n", encoding="utf-8")
+    (tmp_path / f"{prefix}_code_files.jsonl").write_text(code_file.model_dump_json() + "\n", encoding="utf-8")
+    (tmp_path / f"{prefix}_code_symbols.jsonl").write_text("", encoding="utf-8")
+
+    async def github_unavailable(self, repo, pr_number):
+        raise RuntimeError("GitHub rate limit")
+
+    class CapturingGraph:
+        available = True
+
+        def build_graph(self, **kwargs):
+            assert kwargs["pr"].number == 350
+            assert kwargs["changes"][0].file_path == "src/auth.ts"
+            assert kwargs["pages"][0].flow_id == "FLOW-completed-crawl"
+            return {"PRChange": 1}
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(main_mod, "get_settings", lambda: settings)
+    monkeypatch.setattr(CodeAnalyzer, "run", github_unavailable)
+    monkeypatch.setattr(main_mod, "get_graph", CapturingGraph)
+    monkeypatch.setattr(
+        main_mod.RequirementIngestor,
+        "load_from_disk",
+        lambda _data_dir: [Requirement(id="REQ-1", text="Users sign in", category="auth")],
+    )
+    manager = type("Manager", (), {"get_session": lambda self, requested_id: session if requested_id == crawl_id else None})()
+    monkeypatch.setattr(main_mod.CrawlSessionManager, "get_instance", lambda _data_dir: manager)
+
+    # A focused direct call avoids the global test client fixture and asserts
+    # the fallback's provenance boundary.
+    response = await main_mod.build_graph(main_mod.BuildGraphRequest(repo="realworld-apps/angular-realworld-example-app", pr_number=350, crawl_id=crawl_id))
+    assert response["code_evidence_source"] == "persisted_immutable_cache"
+
+
 def test_ingest_returns_a_json_validation_error_when_extraction_fails(client, monkeypatch):
     """A failed real source must not become a browser-side JSON parser error."""
     from app.ingestor import RequirementIngestor

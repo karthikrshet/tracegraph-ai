@@ -1040,8 +1040,9 @@ async function runPRAnalysis(repo, prNumber, force = true) {
     // Update PR Header Details
     document.getElementById("prTitleDisplay").innerText = report.pr_title || `PR #${prNumber}`;
     const risk = report.overall_risk || "UNASSESSED";
-    document.getElementById("prRiskBadge").innerText = `${risk} RISK`;
-    document.getElementById("prRiskBadge").className = `badge ${risk === "HIGH" ? "badge-risk-high" : risk === "MEDIUM" ? "badge-warning" : "badge-unverified"}`;
+    const riskLabel = risk === "NONE" ? "NO VERIFIED UI RISK" : `${risk} RISK`;
+    document.getElementById("prRiskBadge").innerText = riskLabel;
+    document.getElementById("prRiskBadge").className = `badge ${risk === "HIGH" ? "badge-risk-high" : risk === "MEDIUM" ? "badge-warning" : risk === "NONE" ? "badge-partial" : "badge-unverified"}`;
 
     // Update Top Counters
     const changedFilesCount = Array.isArray(report.changed_files) ? report.changed_files.length : (report.metrics?.changed_files ?? "—");
@@ -1132,8 +1133,16 @@ function renderBlastRadiusReport(report) {
   if (summaryEl) {
     summaryEl.innerHTML = formatMarkdownToHtml(report.summary || "The graph traversal found no impact paths for this PR.");
   }
-  document.getElementById("llmEngineBadge").innerText = "GRAPH VERIFIED";
-  document.getElementById("llmEngineBadge").className = "badge badge-success";
+  const hasBrowserImpact = (report.impacted_ui_elements || []).length > 0 ||
+    (report.impacted_flows || []).length > 0 ||
+    (report.impacted_requirements || []).length > 0;
+  const hasCodeEvidence = (report.changed_files || []).length > 0;
+  document.getElementById("llmEngineBadge").innerText = hasBrowserImpact
+    ? "GRAPH VERIFIED"
+    : hasCodeEvidence
+      ? "CODE VERIFIED • NO UI PATH"
+      : "EVIDENCE INCOMPLETE";
+  document.getElementById("llmEngineBadge").className = `badge ${hasBrowserImpact ? "badge-success" : "badge-partial"}`;
 
   // Populate QA Test Recommendation
   const recEl = document.getElementById("qaRecContent");
