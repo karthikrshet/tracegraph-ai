@@ -295,4 +295,4 @@ No hard-coded precision/recall score is claimed by the repository. The evaluatio
 
 Absence is a state, not a missing edge: `UNVERIFIED` means the bounded crawl did not find evidence; `ABSENT` is reserved for a future exhaustive-coverage certificate. This prevents “not observed” from being misreported as “not built.”
 
-See [the design document](docs/design_document.md) for the agent boundaries, schema rationale, confidence handling, evaluation protocol, scope, and next-week priorities.
+See [the design document](docs/design_document.md) for the agent boundaries, schema rationale, confidence handling, evaluation protocol, scope, and next-week priorities. Use [the Loom walkthrough script](docs/loom_walkthrough_script.md) to record the required 5–10 minute prototype demonstration from a fresh evidence-backed run.
