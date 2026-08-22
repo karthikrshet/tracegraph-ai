@@ -2,8 +2,8 @@
 
 **Testsigma AI Engineer Take-Home Assignment**  
 **Author:** Karthik  
-**Date:** 2026-08-21  
-**Version:** 1.0  
+**Date:** 2026-08-23
+**Version:** 1.1
 **Target:** selected public application/repository/PR triplet, recorded per run
 
 ---
@@ -50,7 +50,7 @@ And the system's response is not an LLM opinion — it's a graph path.
 
 | ID | Name | Pages | Linked requirement |
 |----|------|-------|--------------------|
-| observed-crawl-350 | Public authentication navigation | `/` → `/login` → `/register` | REQ-001 |
+| FLOW-crawl_20260822_192039 | Observed public Conduit crawl | Home → public auth/article/profile/tag surfaces | REQ-001 |
 
 ---
 
@@ -89,7 +89,7 @@ The boundary between Stage 5 (deterministic graph traversal) and Stage 7 (LLM ex
 > "This PR might affect authentication because the AI thinks the file name sounds relevant."
 
 **Because graph traversal determines impact**, you get:
-> "PR #350 → `auth.component.ts` → `AuthComponent` (file-scope mapping) → Sign up on `/` → observed-crawl-350 → `REQ-001` (path confidence 0.45)"
+> "PR #350 → `auth.component.ts` → `AuthComponent` (file-scope mapping) → Sign up on `/` → observed crawl → `REQ-001` (path confidence 0.45)"
 
 Every single impact claim is an auditable, reproducible graph path.
 
@@ -111,13 +111,13 @@ Every single impact claim is an auditable, reproducible graph path.
 | QA Evidence Verification | ✅ | | Rejects claims whose graph path, crawl element, page DOM, or screenshot is missing |
 | Test Generation & Review | ✅ | | Emits a test only for a verified browser-observed transition; low confidence remains `NEEDS_REVIEW` |
 
-### 3.2 QA intelligence is a gate, not a second source of truth
+### 3.1 QA intelligence is a gate, not a second source of truth
 
 The QA layer has deliberately narrow authority. `crawl_agent`, `requirement_agent`, `code_agent`, `mapping_agent`, and `impact_agent` create their own evidence artifacts; the QA layer reads those immutable artifacts and cannot fetch, infer, or repair them. The public agent registry (`GET /api/agents`) documents each stage's input/output contract, tools, failure behavior, and escalation boundary.
 
 For a selected report/crawl pair, the `evidence_verifier` requires the exact graph-hop shape and resolves the referenced `UIElement` against the persisted crawl. It then verifies a captured DOM and screenshot on the corresponding `Page`. The `test_generator` can only produce navigation steps from a persisted `Transition`; `test_reviewer` approves only verified paths at confidence ≥ 0.50; `test_humanizer` only formats that already-approved evidence for a QA lead. Missing evidence returns `REJECTED`, low confidence returns `NEEDS_REVIEW`, and neither becomes a test case.
 
-### 3.1 Crawl Control Center & Real-Time Observability
+### 3.2 Crawl Control Center & Real-Time Observability
 
 The dashboard provides a dedicated **Crawl Application Control Center** featuring:
 1. **Target URL Input & Security Validation**: Server-side DNS resolution rejecting RFC1918 private subnets, loopbacks (`127.0.0.1`, `::1`), link-local IPs, and cloud metadata endpoints (`169.254.169.254`, `metadata.google.internal`).
@@ -153,9 +153,8 @@ The dashboard provides a dedicated **Crawl Application Control Center** featurin
   element_type: "link"
 })
 
-(:Page { id: "PAGE-01", url, title, flow_id, step_order, screenshot_path, dom_path })
-(:Transition { id: "TRANS-001", from_page_id: "PAGE-01", to_page_id: "PAGE-02", trigger_element_id: "UI-006", interaction_type: "click", action_label: "Click Product Card" })
-(:UserFlow { id: "FLOW-01", name: "Product Browse to Add to Cart", description: "..." })
+(:Page { id: "PAGE-01", url, title, flow_id, step_order })
+(:UserFlow { id: "FLOW-crawl_20260822_192039", name: "Observed crawl: demo.realworld.show", description: "Bounded public Conduit crawl" })
 
 // Layer 3: Code
 (:CodeFile { path: "src/app/core/auth/auth.component.ts", language: "typescript", component_name: "auth.component" })
@@ -181,6 +180,10 @@ The dashboard provides a dedicated **Crawl Application Control Center** featurin
 })
 ```
 
+`screenshot_path` and `dom_path` remain immutable crawl-artifact metadata on
+disk and are checked by the evidence verifier; they are intentionally not
+duplicated into the disposable active-run Neo4j index.
+
 ### 4.2 Edge Types
 
 ```cypher
@@ -201,17 +204,16 @@ The dashboard provides a dedicated **Crawl Application Control Center** featurin
 (ui:UIElement)-[:PART_OF]->(page:Page)
 (flow:UserFlow)-[:REQUIRES]->(req:Requirement)
 
-// Screen Relationship & State Transitions
-(p1:Page)-[:TRANSITION_TO { action: "Click Product Card", trigger_element_id: "UI-006" }]->(p2:Page)
-(p1:Page)-[:NAVIGATES_TO]->(p2:Page)
+// Screen relationship: transitions are relationship properties, not nodes
+(p1:Page)-[:TRANSITION_TO { id: "TRANS-001", action: "Sign in", interaction_type: "navigation", trigger_element_id: "UI-PAGE-01-008" }]->(p2:Page)
 
 (change:PRChange)-[:TOUCHES]->(file:CodeFile)
 (change:PRChange)-[:MODIFIES { delta_type: "modified" }]->(sym:CodeSymbol)
 (change:PRChange)-[:PART_OF_PR]->(pr:PullRequest)
 (sym:CodeSymbol)-[:DEFINED_IN { start_line: 1, end_line: 50 }]->(file:CodeFile)
 
-// Absence
-(req:Requirement)-[:ABSENT { reason: "..." }]->(flow:UserFlow)
+// Bounded-crawl gaps are stored on Requirement.coverage_status.
+// This implementation does not create ABSENT edges without an exhaustive certificate.
 ```
 
 ### 4.3 Absence Modeling
@@ -226,7 +228,7 @@ ABSENT     — no COVERS edges and a separately recorded exhaustive-coverage cer
 ```
 
 The distinction between UNVERIFIED and ABSENT is epistemically important:
-- UNVERIFIED: "I didn't find it, but I only crawled FLOW-01"
+- UNVERIFIED: "I didn't find it within this bounded public crawl"
 - ABSENT: "I crawled all scoped flows and found no trace"
 
 The current bounded-crawl implementation emits `UNVERIFIED`, not `ABSENT`, when no evidence is found. An `ABSENT` edge is reserved for the future certificate workflow.
@@ -366,7 +368,7 @@ Given a pinned PR head SHA, persisted crawl artifacts, persisted extracted requi
 - Evidence provenance on every edge
 - 4-state coverage model
 - Honest limitation documentation
-- 65 passing tests
+- 98 passing automated tests at the final submission gate
 
 ---
 
@@ -451,13 +453,13 @@ immutable head `fc4380310755babb0d8c2021420d5b3e860b890c`.
 | Metric | Verified value |
 |--------|---------------:|
 | Requirements | 3 |
-| Browser-observed pages | 3 |
-| DOM snapshots / screenshots | 3 / 3 |
-| UI elements / transitions | 27 / 5 |
+| Browser-observed pages | 20 |
+| DOM snapshots / screenshots | 20 / 20 |
+| UI elements / transitions | 463 / 19 |
 | Code files / symbols | 7 / 5 |
 | PR changes / flows | 7 / 1 |
 | Requirement paths in report | 1 |
-| Unverified requirements | 2 |
+| Unverified requirements | 1 (`REQ-003`) |
 
 The generated report is LOW confidence, intentionally: the one demonstrated
 path traverses an existing `AuthComponent` changed at file scope to
