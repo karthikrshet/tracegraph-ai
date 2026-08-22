@@ -646,6 +646,23 @@ async def get_requirements() -> dict[str, Any]:
     if not requirements:
         raise HTTPException(status_code=404, detail="No ingested requirements are available.")
 
+    # Ingestion persists requirements as UNVERIFIED.  Once a graph has been
+    # built, take the coverage state from Neo4j, but only if its source matches
+    # the exact document currently shown in the dashboard.  This prevents an
+    # old REQ-001 from a different product from leaking into a new ingestion.
+    graph = get_graph()
+    try:
+        if graph.available:
+            statuses = graph.get_requirement_coverage_statuses(requirements)
+            requirements = [
+                req.model_copy(update={"coverage_status": statuses.get(req.id, req.coverage_status)})
+                for req in requirements
+            ]
+    except GraphUnavailableError:
+        pass
+    finally:
+        graph.close()
+
     return {
         "requirements": [r.model_dump(mode="json") for r in requirements],
         "count": len(requirements),

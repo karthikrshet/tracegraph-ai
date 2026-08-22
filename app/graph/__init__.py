@@ -574,6 +574,28 @@ class GraphBuilder:
 
         return []
 
+    def get_requirement_coverage_statuses(self, requirements: list[Requirement]) -> dict[str, str]:
+        """Read current graph coverage only for the exact ingested sources.
+
+        Requirement identifiers restart at REQ-001 for each ingestion.  Matching
+        on both ID and source URL prevents a prior graph build from assigning a
+        stale coverage result to a newly ingested, unrelated README.
+        """
+        self._require_driver()
+        items = [{"id": req.id, "source_url": req.source_url} for req in requirements]
+        cypher = """
+        UNWIND $items AS item
+        MATCH (r:Requirement {id: item.id, source_url: item.source_url})
+        RETURN r.id AS id, r.coverage_status AS coverage_status
+        """
+        with self._driver.session() as session:
+            result = session.run(cypher, items=items)
+            return {
+                record["id"]: record["coverage_status"]
+                for record in result
+                if record["coverage_status"] in {status.value for status in CoverageStatus}
+            }
+
     def cypher_query(
         self, query: str, params: dict[str, Any] | None = None
     ) -> list[dict[str, Any]]:

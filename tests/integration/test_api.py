@@ -107,6 +107,43 @@ def test_ingest_rejects_mock_provider(client, monkeypatch):
     assert response.status_code == 503
 
 
+def test_requirements_do_not_use_coverage_from_a_different_source(client, monkeypatch, tmp_path):
+    """REQ identifiers are not globally meaningful across separate ingestions."""
+    import app.api.main as main_mod
+    from app.config import Settings
+    from app.models import CoverageStatus, Requirement
+
+    class GraphWithStaleRequirement:
+        available = True
+
+        def get_requirement_coverage_statuses(self, requirements):
+            # The API must safely merge only statuses returned for matching
+            # sources; an unmatched ID stays UNVERIFIED.
+            assert requirements[0].source_url == "https://example.com/current-readme"
+            return {}
+
+        def close(self):
+            return None
+
+    settings = Settings(data_dir=tmp_path)
+    (tmp_path / "requirements.jsonl").write_text(
+        Requirement(
+            id="REQ-001",
+            text="Current product requirement",
+            category="general",
+            source_url="https://example.com/current-readme",
+            coverage_status=CoverageStatus.UNVERIFIED,
+        ).model_dump_json() + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(main_mod, "get_settings", lambda: settings)
+    monkeypatch.setattr(main_mod, "get_graph", lambda: GraphWithStaleRequirement())
+
+    response = client.get("/api/requirements")
+    assert response.status_code == 200
+    assert response.json()["requirements"][0]["coverage_status"] == "UNVERIFIED"
+
+
 def test_crawl_session_reads_require_production_auth(client, monkeypatch):
     """Crawl metadata and artifacts must not be anonymously visible in production."""
     import app.api.main as main_mod

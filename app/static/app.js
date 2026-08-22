@@ -235,12 +235,15 @@ async function loadIngestedRequirements() {
           ? '<span class="badge badge-success">COVERED</span>' 
           : (r.coverage_status === "PARTIAL" ? '<span class="badge badge-warning">PARTIAL</span>'
             : (r.coverage_status === "ABSENT" ? '<span class="badge badge-danger">ABSENT</span>' : '<span class="badge badge-unverified">UNVERIFIED</span>'));
+        const coverageHint = r.coverage_status === "UNVERIFIED"
+          ? "<small class='text-muted'>Awaiting matching crawl + graph build</small>"
+          : "";
         row.innerHTML = `
           <td><strong>${escapeHtml(r.id)}</strong></td>
           <td><code>${escapeHtml(r.category)}</code></td>
           <td>${escapeHtml(r.text)}</td>
           <td><code>${escapeHtml(r.testability_score)}</code></td>
-          <td>${statusBadge}</td>
+          <td>${statusBadge}<br>${coverageHint}</td>
         `;
         tbody.appendChild(row);
       });
