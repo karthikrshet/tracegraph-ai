@@ -14,6 +14,8 @@ from urllib.parse import urlparse
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEFAULT_DOCUMENT_HOSTS = ("github.com", "raw.githubusercontent.com")
+
 
 def _parse_allowed_hosts(value: str) -> list[str]:
     """Return normalized hostnames from a comma-separated allowlist.
@@ -78,7 +80,10 @@ class Settings(BaseSettings):
     crawler_timeout: int = 30000
     crawler_max_depth: int = 3
     allowed_crawl_domains: str = ""
-    allowed_document_domains: str = ""
+    # GitHub is the documented default source in the dashboard. Additional
+    # public documentation hosts can be added by an operator, but arbitrary
+    # URL fetching remains disallowed.
+    allowed_document_domains: str = ",".join(DEFAULT_DOCUMENT_HOSTS)
     # Development supports a user-selected public target after the same SSRF
     # validation as configured targets. Production defaults to opt-out unless
     # an authenticated operator explicitly enables it.
@@ -122,7 +127,8 @@ class Settings(BaseSettings):
 
     @property
     def allowed_document_hosts(self) -> list[str]:
-        return _parse_allowed_hosts(self.allowed_document_domains)
+        configured_hosts = _parse_allowed_hosts(self.allowed_document_domains)
+        return configured_hosts or list(DEFAULT_DOCUMENT_HOSTS)
 
     @property
     def cors_origins(self) -> list[str]:
@@ -131,6 +137,16 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() in {"production", "staging"}
+
+    @property
+    def is_serverless_runtime(self) -> bool:
+        """Whether the application is running in Vercel's serverless runtime.
+
+        A serverless request handler is not a durable browser-worker process:
+        it cannot safely own a long-lived Playwright browser, persist an SSE
+        stream, or retain an in-memory crawl session after the response.
+        """
+        return bool(os.environ.get("VERCEL"))
 
     @property
     def custom_crawl_hosts_enabled(self) -> bool:

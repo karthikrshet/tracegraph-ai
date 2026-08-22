@@ -34,6 +34,11 @@ def test_allowed_domains_normalize_operator_pasted_urls():
     assert s.allowed_document_hosts == ["raw.githubusercontent.com"]
 
 
+def test_github_document_hosts_are_safe_defaults_when_not_configured():
+    settings = Settings(allowed_document_domains="")
+    assert settings.allowed_document_hosts == ["github.com", "raw.githubusercontent.com"]
+
+
 def test_custom_crawl_hosts_default_off_in_production():
     assert Settings(app_env="production").custom_crawl_hosts_enabled is False
     assert Settings(app_env="development").custom_crawl_hosts_enabled is True
@@ -51,6 +56,11 @@ def test_blank_integer_deployment_variables_use_safe_defaults(monkeypatch):
     assert settings.target_pr == 0
     assert settings.crawler_timeout == 30000
     assert settings.crawler_max_depth == 3
+
+
+def test_vercel_is_recognised_as_a_serverless_runtime(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    assert Settings().is_serverless_runtime is True
 
 
 def test_html_sanitization_removes_scripts_and_styles():

@@ -407,9 +407,9 @@
               <div class="spec-ingest-grid">
                 <div>
                   <p class="text-muted" style="font-size: 0.82rem; margin: 0 0 12px;">Use one option only. A URL is fetched from an approved public documentation host; pasted text stays in this request.</p>
-                  <div role="radiogroup" aria-label="Requirement source" style="display: flex; gap: 16px; margin-bottom: 14px;">
-                    <label class="toggle-item"><input type="radio" name="specSourceMode" value="url" checked><span>Public GitHub README / documentation URL</span></label>
-                    <label class="toggle-item"><input type="radio" name="specSourceMode" value="text"><span>Paste Markdown / requirement text</span></label>
+                  <div class="spec-source-options" role="radiogroup" aria-label="Requirement source">
+                    <label class="spec-source-option"><input type="radio" name="specSourceMode" value="url" checked><span>Public GitHub README / documentation URL</span></label>
+                    <label class="spec-source-option"><input type="radio" name="specSourceMode" value="text"><span>Paste Markdown / requirement text</span></label>
                   </div>
                   <div class="form-group" id="specUrlGroup">
                     <label for="inputSpecUrl">Public documentation URL</label>

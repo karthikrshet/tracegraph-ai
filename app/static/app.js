@@ -238,8 +238,8 @@ async function loadDocumentSourcePolicy() {
     if (!response.ok) throw new Error(data.detail || "Source policy is unavailable.");
     const hosts = (data.allowed_hosts || []).map(escapeHtml);
     target.innerText = hosts.length
-      ? `Approved URL hosts: ${hosts.join(", ")}.`
-      : "No public documentation hosts are configured.";
+      ? `Approved URL hosts: ${hosts.join(", ")}. Use Paste Markdown for another source.`
+      : "URL sources are unavailable. Use Paste Markdown instead.";
   } catch (_) {
     target.innerText = "URL policy is unavailable. Paste the requirement text instead.";
   }
@@ -294,6 +294,18 @@ function customPublicHostEnabled() {
   return document.getElementById("allowCustomPublicHost")?.checked ?? false;
 }
 
+async function readApiError(response, fallbackMessage) {
+  const responseText = await response.text();
+  try {
+    const payload = JSON.parse(responseText);
+    if (payload && typeof payload.detail === "string") return payload.detail;
+  } catch (_) {
+    // A reverse proxy can return an HTML/plain-text error page. Do not expose
+    // its contents or turn it into a misleading JSON parser error in the UI.
+  }
+  return `${fallbackMessage} (HTTP ${response.status}).`;
+}
+
 async function validateUrl(url) {
   const msgEl = document.getElementById("urlValidationMsg");
   if (!url) {
@@ -308,6 +320,9 @@ async function validateUrl(url) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url, allow_custom_public_host: customPublicHostEnabled() }),
     });
+    if (!res.ok) {
+      throw new Error(await readApiError(res, "URL validation could not be completed"));
+    }
     const data = await res.json();
     if (data.valid) {
       msgEl.innerHTML = `<span class='url-valid'>✓ Valid Target: ${escapeHtml(data.hostname || "URL Safe")} (${escapeHtml((data.resolved_ips || []).join(", ") || "Whitelisted")})</span>`;
@@ -378,8 +393,7 @@ async function startAutonomousCrawl() {
     });
 
     if (!res.ok) {
-      const errData = await res.json();
-      throw new Error(errData.detail || "Failed to start crawl");
+      throw new Error(await readApiError(res, "The crawl could not be started"));
     }
 
     const data = await res.json();

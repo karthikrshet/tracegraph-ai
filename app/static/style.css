@@ -1050,6 +1050,60 @@ input[type="text"]:focus, input[type="number"]:focus {
   margin-top: 14px;
 }
 
+.spec-source-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.spec-source-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.spec-source-option input[type="radio"] {
+  accent-color: var(--color-brand);
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+}
+
+.spec-ingest-grid input[type="url"] {
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.84rem;
+  line-height: 1.35;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.spec-ingest-grid input[type="url"]:focus {
+  border-color: var(--border-focus);
+}
+
+#specUrlPolicy {
+  display: block;
+  margin-top: 7px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
 .spec-textarea {
   width: 100%;
   height: 200px;
@@ -1067,6 +1121,16 @@ input[type="text"]:focus, input[type="number"]:focus {
 
 .spec-textarea:focus {
   border-color: var(--border-focus);
+}
+
+@media (max-width: 760px) {
+  .spec-ingest-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .spec-source-options {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ── Screen Artifacts & Screenshots Gallery ────────────────── */

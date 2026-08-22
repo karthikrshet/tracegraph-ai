@@ -154,6 +154,20 @@ def test_crawl_session_reads_require_production_auth(client, monkeypatch):
     assert response.status_code == 401
 
 
+def test_serverless_runtime_rejects_live_browser_crawls(client, monkeypatch, tmp_path):
+    """A Vercel function must fail closed instead of pretending it ran Playwright."""
+    import app.api.main as main_mod
+    from app.config import Settings
+
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setattr(main_mod, "get_settings", lambda: Settings(data_dir=tmp_path))
+
+    response = client.post("/api/crawl", json={"url": "https://academy.codemyfyp.com"})
+
+    assert response.status_code == 503
+    assert "Vercel serverless runtime" in response.json()["detail"]
+
+
 def test_get_report_json_rejects_archived_unverified_report(client):
     """A historical report without graph provenance must not be served."""
     response = client.get("/api/report/6857")

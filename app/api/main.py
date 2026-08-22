@@ -263,6 +263,15 @@ async def start_crawl(req: CrawlStartRequest) -> dict[str, Any]:
     Immediately returns crawl_id and queued status without blocking HTTP request.
     """
     settings = get_settings()
+    if settings.is_serverless_runtime:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Live browser crawling is unavailable in the Vercel serverless runtime. "
+                "Run the crawler through the Docker deployment (or a dedicated browser-worker service) "
+                "so Playwright, screenshots, and crawl-session persistence remain evidence-backed."
+            ),
+        )
     url = req.url
 
     val, crawl_allowlist = validate_crawl_target(
