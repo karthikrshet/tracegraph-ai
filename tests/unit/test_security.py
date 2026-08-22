@@ -40,6 +40,19 @@ def test_custom_crawl_hosts_default_off_in_production():
     assert Settings(app_env="production", allow_custom_crawl_hosts=True).custom_crawl_hosts_enabled is True
 
 
+def test_blank_integer_deployment_variables_use_safe_defaults(monkeypatch):
+    """Blank Vercel environment variables must not prevent the ASGI app importing."""
+    monkeypatch.setenv("TARGET_PR", "")
+    monkeypatch.setenv("CRAWLER_TIMEOUT", "   ")
+    monkeypatch.setenv("CRAWLER_MAX_DEPTH", "")
+
+    settings = Settings()
+
+    assert settings.target_pr == 0
+    assert settings.crawler_timeout == 30000
+    assert settings.crawler_max_depth == 3
+
+
 def test_html_sanitization_removes_scripts_and_styles():
     """RequirementIngestor should strip scripts, styles, nav, and headers from untrusted HTML."""
     ingestor = RequirementIngestor(llm=MockLLMProvider())

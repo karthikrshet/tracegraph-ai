@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -92,6 +93,28 @@ class Settings(BaseSettings):
     app_env: str = "development"
     api_bearer_token: str = ""
     allowed_origins: str = "http://localhost:8000"
+
+    @field_validator("target_pr", "crawler_timeout", "crawler_max_depth", mode="before")
+    @classmethod
+    def blank_integer_environment_values_use_defaults(cls, value: object, info: object) -> object:
+        """Treat blank deployment variables as absent rather than crashing startup.
+
+        Vercel preserves an environment variable whose value is left blank. For
+        integer settings, Pydantic correctly rejects that value, but doing so
+        while the ASGI app is importing makes *every* route return a 500. These
+        settings are optional and have safe defaults, so a blank value has the
+        same semantics as an unset one. Invalid non-blank values still fail
+        fast during deployment/configuration.
+        """
+        if isinstance(value, str) and not value.strip():
+            defaults = {
+                "target_pr": 0,
+                "crawler_timeout": 30000,
+                "crawler_max_depth": 3,
+            }
+            field_name = getattr(info, "field_name", "")
+            return defaults[field_name]
+        return value
 
     @property
     def allowed_domains(self) -> list[str]:
