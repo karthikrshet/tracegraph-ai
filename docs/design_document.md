@@ -111,7 +111,7 @@ Every single impact claim is an auditable, reproducible graph path.
 
 The dashboard provides a dedicated **Crawl Application Control Center** featuring:
 1. **Target URL Input & Security Validation**: Server-side DNS resolution rejecting RFC1918 private subnets, loopbacks (`127.0.0.1`, `::1`), link-local IPs, and cloud metadata endpoints (`169.254.169.254`, `metadata.google.internal`).
-2. **Exploration Budget Bounds**: Server-enforced maximum depth 4, actions 25, states 10, and runtime 300 seconds.
+2. **Exploration Budget Bounds**: The default browser budget is depth 4, 40 navigations, 20 screens, and 300 seconds. Server-enforced ceilings are depth 6, 60 navigations, 25 screens, and 600 seconds.
 3. **Background Asynchronous Execution**: Non-blocking `POST /api/crawl` returning `crawl_id` and status immediately.
 4. **Real-Time Server-Sent Events (`/api/crawl/{id}/events`)**: Streams live events (`page_discovered`, `dom_captured`, `screenshot_captured`, `action_selected`, `transition_created`, `crawl_completed`).
 5. **Artifact Inspection**: Direct access to captured full-page screenshots, DOM HTML snapshots, and the discovered screen transition graph (`PAGE-A -> action -> PAGE-B`).
@@ -345,7 +345,7 @@ Given a pinned PR head SHA, persisted crawl artifacts, persisted extracted requi
 
 | Item | Decision | Reason |
 |------|----------|--------|
-| Unconstrained open-ended web agent | ❌ Bounded exploration with safety validator | Safety first: strict max depth (4), max pages (10), SSRF blocker, blocked destructive verbs |
+| Unconstrained open-ended web agent | ❌ Bounded exploration with safety validator | Safety first: a server-enforced depth-6 / 25-screen / 60-navigation ceiling, SSRF blocker, blocked destructive verbs |
 | Interprocedural call graph | ❌ AST symbol extraction + regex parser | Full TypeScript compiler/LSP runtime adds significant cold-start overhead |
 | Authenticated crawling | ❌ Not implemented | The run is limited to public, non-destructive routes |
 | Arbitrary embedding models | ❌ Deterministic name overlap + exact matches | Provides 100% reproducible baseline; eliminates LLM hallucination in evidence path |

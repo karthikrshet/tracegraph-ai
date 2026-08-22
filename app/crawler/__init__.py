@@ -17,10 +17,11 @@ import hashlib
 import json
 import logging
 import re
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from app.crawler.security import validate_crawl_url
 from app.models import Page, Transition, UIElement, UserFlow
@@ -350,8 +351,13 @@ class AutonomousCrawlerAgent:
     - Recording concrete Transitions and building the Screen Relationship Graph
     """
 
-    MAX_PAGES = 10
-    MAX_ACTIONS = 25
+    # These are deliberately bounded: public applications can contain an
+    # effectively unbounded URL space (search, calendar, pagination).  The
+    # limits are high enough to capture a meaningful application slice without
+    # turning an operator-initiated crawl into an open-ended load generator.
+    MAX_PAGES = 25
+    MAX_ACTIONS = 60
+    MAX_DEPTH = 6
     MAX_DEPTH = 4
     BLOCKED_VERBS = ["delete", "destroy", "remove", "logout", "log out", "sign out", "buy now", "purchase"]
 
@@ -402,13 +408,22 @@ class AutonomousCrawlerAgent:
 
     def _compute_state_fingerprint(self, url: str, element_count: int, title: str) -> str:
         """Generate state fingerprint to detect known page states."""
-        raw = f"{url.split('?')[0]}|{title}|{element_count}"
+        # Keep query parameters: pagination and filtered listings often share
+        # a path and title but are distinct user-visible states.
+        raw = f"{self._normalise_navigation_url(url)}|{title}|{element_count}"
         return hashlib.md5(raw.encode()).hexdigest()[:8]
+
+    @staticmethod
+    def _normalise_navigation_url(url: str) -> str:
+        """Remove fragments while preserving a meaningful route and query."""
+        parsed = urlparse(url)
+        return urlunparse((parsed.scheme, parsed.netloc, parsed.path or "/", parsed.params, parsed.query, ""))
 
     async def explore(
         self,
         max_pages: int = 10,
         max_actions: int = 25,
+        max_depth: int = 4,
         same_domain_only: bool = True,
         capture_screenshots: bool = True,
         capture_dom: bool = True,
@@ -428,6 +443,7 @@ class AutonomousCrawlerAgent:
         return await self._run_playwright_exploration(
             max_pages=min(max(1, max_pages), self.MAX_PAGES),
             max_actions=min(max(1, max_actions), self.MAX_ACTIONS),
+            max_depth=min(max(1, max_depth), self.MAX_DEPTH),
             same_domain_only=True,
             capture_screenshots=capture_screenshots,
             capture_dom=capture_dom,
@@ -645,6 +661,7 @@ class AutonomousCrawlerAgent:
         self,
         max_pages: int = 10,
         max_actions: int = 25,
+        max_depth: int = 4,
         same_domain_only: bool = True,
         capture_screenshots: bool = True,
         capture_dom: bool = True,
@@ -656,8 +673,13 @@ class AutonomousCrawlerAgent:
         elements: list[UIElement] = []
         transitions: list[Transition] = []
         screen_graph: dict[str, list[str]] = {}
-        visited_states: set[str] = set()
-        executed_actions: set[tuple[str, str]] = set()
+        visited_urls: set[str] = set()
+        queued_urls: set[str] = {self._normalise_navigation_url(self._base_url)}
+        # URL, link-depth, source page ID, source UI element ID, action label.
+        frontier: deque[tuple[str, int, str | None, str, str]] = deque(
+            [(self._base_url, 0, None, "", "Initial page")]
+        )
+        navigations = 0
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
@@ -665,139 +687,118 @@ class AutonomousCrawlerAgent:
             page = await context.new_page()
 
             try:
-                # 1. Start at base URL with resilient wait
                 logger.info("AutonomousCrawlerAgent starting exploration at %s", self._base_url)
-                try:
-                    await page.goto(self._base_url, timeout=20000, wait_until="domcontentloaded")
+                while frontier and len(pages) < max_pages and navigations <= max_actions:
+                    target_url, depth, parent_page_id, trigger_element_id, action_label = frontier.popleft()
+                    target_url = self._normalise_navigation_url(target_url)
+                    if target_url in visited_urls or not self._is_safe_url(target_url):
+                        continue
+
+                    if parent_page_id is not None:
+                        navigations += 1
+                        self._emit("action_selected", f"Agent selected link: {action_label}", {
+                            "action_id": trigger_element_id,
+                            "action_label": action_label,
+                            "type": "link",
+                            "actions_count": navigations,
+                        })
+
                     try:
-                        await page.wait_for_load_state("networkidle", timeout=4000)
-                    except Exception:
-                        await page.wait_for_timeout(1500)
-                except Exception as nav_err:
-                    logger.warning("Initial navigation to %s encountered error: %s", self._base_url, nav_err)
+                        await page.goto(target_url, timeout=20000, wait_until="domcontentloaded")
+                        try:
+                            await page.wait_for_load_state("networkidle", timeout=4000)
+                        except Exception:
+                            await page.wait_for_timeout(1000)
+                    except Exception as nav_err:
+                        logger.info("Could not navigate to %s: %s", target_url, nav_err)
+                        continue
 
-                for step in range(1, min(max_actions, self.MAX_ACTIONS) + 1):
-                    current_url = page.url
-                    if not self._is_safe_url(current_url):
-                        logger.warning("Crawler navigated off-domain to %s — stepping back", current_url)
-                        break
+                    current_url = self._normalise_navigation_url(page.url)
+                    if not self._is_safe_url(current_url) or current_url in visited_urls:
+                        continue
+                    visited_urls.add(current_url)
 
-                    title = await page.title()
-                    if not title or title.strip() == "":
-                        title = f"{urlparse(current_url).netloc} Page"
-
-                    dom_html = await page.content()
+                    title = (await page.title()).strip() or f"{urlparse(current_url).netloc} Page"
                     page_id = f"PAGE-{len(pages) + 1:02d}"
+                    extracted = await self._extract_elements(page, page_id)
+                    dom_html = await page.content()
+                    shot_rel = ""
+                    dom_rel = ""
 
-                    # Capture screenshot to session dir
                     (self._session_artifacts_dir / "screenshots").mkdir(parents=True, exist_ok=True)
                     (self._session_artifacts_dir / "dom").mkdir(parents=True, exist_ok=True)
-                    shot_file = self._session_artifacts_dir / "screenshots" / f"{page_id}.png"
-                    await page.screenshot(path=str(shot_file), full_page=False)
-
-                    # Save DOM snapshot to session dir
-                    dom_file = self._session_artifacts_dir / "dom" / f"{page_id}.html"
-                    with open(dom_file, "w", encoding="utf-8") as f:
-                        f.write(dom_html)
-
-                    # Also save copies to main data/artifacts
                     (self._data_dir / "artifacts").mkdir(parents=True, exist_ok=True)
-                    main_shot = self._data_dir / "artifacts" / f"{page_id}.png"
-                    await page.screenshot(path=str(main_shot), full_page=False)
-                    with open(self._data_dir / "artifacts" / f"{page_id}.html", "w", encoding="utf-8") as f:
-                        f.write(dom_html)
+                    if capture_screenshots:
+                        shot_file = self._session_artifacts_dir / "screenshots" / f"{page_id}.png"
+                        await page.screenshot(path=str(shot_file), full_page=True)
+                        await page.screenshot(path=str(self._data_dir / "artifacts" / f"{page_id}.png"), full_page=True)
+                        shot_rel = f"artifacts/crawls/{self._session_id}/screenshots/{page_id}.png" if self._session_id != "default" else f"artifacts/{page_id}.png"
+                    if capture_dom:
+                        dom_file = self._session_artifacts_dir / "dom" / f"{page_id}.html"
+                        dom_file.write_text(dom_html, encoding="utf-8")
+                        (self._data_dir / "artifacts" / f"{page_id}.html").write_text(dom_html, encoding="utf-8")
+                        dom_rel = f"artifacts/crawls/{self._session_id}/dom/{page_id}.html" if self._session_id != "default" else f"artifacts/{page_id}.html"
 
-                    shot_rel = f"artifacts/crawls/{self._session_id}/screenshots/{page_id}.png" if self._session_id != "default" else f"artifacts/{page_id}.png"
-                    dom_rel = f"artifacts/crawls/{self._session_id}/dom/{page_id}.html" if self._session_id != "default" else f"artifacts/{page_id}.html"
-
-                    # Observe interactive elements
-                    extracted = await self._extract_elements(page, page_id)
-                    state_fp = self._compute_state_fingerprint(current_url, len(extracted), title)
-
-                    if state_fp not in visited_states:
-                        visited_states.add(state_fp)
-                        current_page_node = Page(
-                            id=page_id,
-                            url=current_url,
-                            title=title,
-                            screenshot_path=shot_rel,
-                            dom_path=dom_rel,
-                            flow_id=f"FLOW-{len(pages) + 1:02d}",
-                            step_order=len(pages) + 1,
-                        )
-                        pages.append(current_page_node)
-                        elements.extend(extracted)
-                        self._emit("page_discovered", f"Discovered screen: {title} ({current_url})", {
-                            "page_id": page_id,
-                            "url": current_url,
-                            "title": title,
-                            "pages_count": len(pages),
+                    current_page_node = Page(
+                        id=page_id,
+                        url=current_url,
+                        title=title,
+                        screenshot_path=shot_rel,
+                        dom_path=dom_rel,
+                        flow_id="FLOW-01",
+                        step_order=len(pages) + 1,
+                    )
+                    pages.append(current_page_node)
+                    elements.extend(extracted)
+                    self._emit("page_discovered", f"Discovered screen: {title} ({current_url})", {
+                        "page_id": page_id, "url": current_url, "title": title, "pages_count": len(pages),
+                    })
+                    if capture_screenshots:
+                        self._emit("screenshot_captured", f"Captured full-page screenshot for {page_id}", {
+                            "page_id": page_id, "screenshot_path": shot_rel,
                         })
-                        self._emit("screenshot_captured", f"Captured screenshot for {page_id}", {
-                            "page_id": page_id,
-                            "screenshot_path": shot_rel,
-                        })
+                    if capture_dom:
                         self._emit("dom_captured", f"Captured DOM snapshot for {page_id}", {
-                            "page_id": page_id,
-                            "dom_path": dom_rel,
+                            "page_id": page_id, "dom_path": dom_rel,
                         })
-                    else:
-                        current_page_node = next((p for p in pages if p.url == current_url), pages[-1])
 
-                    if len(pages) >= min(max_pages, self.MAX_PAGES):
-                        logger.info("Autonomous exploration reached MAX_PAGES limit (%d)", self.MAX_PAGES)
-                        break
+                    if parent_page_id:
+                        transition = Transition(
+                            id=f"TRANS-{len(transitions) + 1:03d}",
+                            from_page_id=parent_page_id,
+                            to_page_id=page_id,
+                            trigger_element_id=trigger_element_id,
+                            interaction_type="navigation",
+                            action_label=action_label,
+                        )
+                        transitions.append(transition)
+                        screen_graph.setdefault(parent_page_id, []).append(page_id)
+                        self._emit("transition_created", f"Transition created: {parent_page_id} → {page_id}", {
+                            "transition_id": transition.id,
+                            "from_page": parent_page_id,
+                            "to_page": page_id,
+                            "action": action_label,
+                            "transitions_count": len(transitions),
+                        })
 
-                    # 2. Select next candidate action
-                    candidate = self._select_next_action(extracted, excluded_selectors={
-                        selector for action_url, selector in executed_actions if action_url == current_url
-                    })
-                    if not candidate:
-                        logger.info("No more safe unexplored interactive actions found on %s", current_url)
-                        break
+                    if depth >= max_depth:
+                        continue
 
-                    # 3. Execute interaction
-                    action_selector = candidate.selector
-                    action_label = candidate.label
-                    executed_actions.add((current_url, action_selector))
-                    logger.info("Agent executing action: [%s] on selector %s", action_label, action_selector)
-                    self._emit("action_selected", f"Agent selected action: {action_label}", {
-                        "action_id": candidate.id,
-                        "action_label": action_label,
-                        "type": candidate.element_type,
-                        "actions_count": step,
-                    })
-
-                    try:
-                        el = await page.query_selector(action_selector)
-                        if el:
-                            await el.click(timeout=5000)
-                            try:
-                                await page.wait_for_load_state("networkidle", timeout=4000)
-                            except Exception:
-                                await page.wait_for_timeout(1500)
-
-                            next_page_id = f"PAGE-{len(pages) + 1:02d}"
-                            trans_id = f"TRANS-{len(transitions) + 1:03d}"
-                            t = Transition(
-                                id=trans_id,
-                                from_page_id=current_page_node.id,
-                                to_page_id=next_page_id,
-                                trigger_element_id=candidate.id,
-                                interaction_type="click",
-                                action_label=action_label,
-                            )
-                            transitions.append(t)
-                            screen_graph.setdefault(current_page_node.id, []).append(next_page_id)
-                            self._emit("transition_created", f"Transition created: {t.from_page_id} → {t.to_page_id}", {
-                                "transition_id": t.id,
-                                "from_page": t.from_page_id,
-                                "to_page": t.to_page_id,
-                                "action": t.action_label,
-                                "transitions_count": len(transitions),
-                            })
-                    except Exception as act_err:
-                        logger.debug("Action execution error on %s: %s", action_selector, act_err)
+                    # Breadth-first link exploration avoids repeatedly clicking
+                    # controls on one screen and reaches the application's
+                    # distinct routes (including pagination URLs) first.
+                    for element in extracted:
+                        if element.element_type != "link" or not self._is_safe_action(element.label, "link"):
+                            continue
+                        href_match = re.search(r'^a\[href="(.*)"\]$', element.selector)
+                        if not href_match:
+                            continue
+                        href = href_match.group(1).replace('\\"', '"').replace('\\\\', '\\')
+                        next_url = self._normalise_navigation_url(urljoin(current_url, href))
+                        if next_url in queued_urls or next_url in visited_urls or not self._is_safe_url(next_url):
+                            continue
+                        queued_urls.add(next_url)
+                        frontier.append((next_url, depth + 1, page_id, element.id, element.label))
 
             finally:
                 await browser.close()
@@ -820,7 +821,12 @@ class AutonomousCrawlerAgent:
         for sel, elem_type in selectors:
             try:
                 matches = await page.query_selector_all(sel)
-                for index, el in enumerate(matches[:8], start=1):
+                # Links define the crawl frontier, so truncating them to the
+                # first eight silently made broad sites look like three-page
+                # applications.  Keep a bounded but useful route sample while
+                # still limiting noisy button/input extraction.
+                element_limit = 40 if elem_type == "link" else 12
+                for index, el in enumerate(matches[:element_limit], start=1):
                     text = (await el.inner_text() or "").strip()
                     dt_id = await el.get_attribute("data-testid") or ""
                     aria = await el.get_attribute("aria-label") or ""

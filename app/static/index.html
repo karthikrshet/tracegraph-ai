@@ -249,12 +249,16 @@
 
                 <div class="config-sliders-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
                   <div class="form-group">
-                    <label for="crawlMaxDepth">Max Depth: <span id="valMaxDepth" class="text-cyan">3</span></label>
-                    <input type="range" id="crawlMaxDepth" min="1" max="4" value="3" class="slider">
+                    <label for="crawlMaxDepth">Link Depth: <span id="valMaxDepth" class="text-cyan">4</span></label>
+                    <input type="range" id="crawlMaxDepth" min="1" max="6" value="4" class="slider">
                   </div>
                   <div class="form-group">
-                    <label for="crawlMaxActions">Max Actions: <span id="valMaxActions" class="text-cyan">20</span></label>
-                    <input type="range" id="crawlMaxActions" min="1" max="25" value="20" class="slider">
+                    <label for="crawlMaxActions">Max Actions: <span id="valMaxActions" class="text-cyan">40</span></label>
+                    <input type="range" id="crawlMaxActions" min="1" max="60" value="40" class="slider">
+                  </div>
+                  <div class="form-group">
+                    <label for="crawlMaxStates">Max Screens: <span id="valMaxStates" class="text-cyan">20</span></label>
+                    <input type="range" id="crawlMaxStates" min="1" max="25" value="20" class="slider">
                   </div>
                 </div>
 
@@ -284,7 +288,7 @@
                   </button>
                 </div>
                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">
-                  <span>Live crawl only. The system records browser-observed artifacts and does not substitute fixture data.</span>
+                  <span>Live crawl only. Up to 25 distinct same-domain screens; records full-page browser artifacts and does not substitute fixture data.</span>
                 </div>
               </div>
 

@@ -8,6 +8,22 @@ let currentReport = null;
 let currentCrawlId = null;
 let crawlEventSource = null;
 let crawlTimerInterval = null;
+
+function fitKnowledgeGraph(animated = true) {
+  if (!network) return false;
+  const container = document.getElementById("networkGraph");
+  if (!container || container.clientWidth === 0 || container.clientHeight === 0) return false;
+
+  // Vis.js measures a hidden tab as 0×0.  Resizing and redrawing before fit
+  // makes the control reliable both after switching tabs and after a graph
+  // reload.
+  network.setSize("100%", "100%");
+  network.redraw();
+  requestAnimationFrame(() => {
+    network.fit({ animation: animated ? { duration: 400, easingFunction: "easeInOutQuad" } : false });
+  });
+  return true;
+}
 let crawlStartTime = null;
 
 function escapeHtml(value) {
@@ -65,7 +81,7 @@ function initTabs() {
       });
 
       if (targetId === "graphView" && network) {
-        setTimeout(() => network.fit(), 50);
+        setTimeout(() => fitKnowledgeGraph(false), 50);
       }
       if (targetId === "sessionsView") {
         loadCrawlSessions();
@@ -95,6 +111,7 @@ function initCrawlControls() {
   // Sliders
   const depthSlider = document.getElementById("crawlMaxDepth");
   const actionsSlider = document.getElementById("crawlMaxActions");
+  const statesSlider = document.getElementById("crawlMaxStates");
 
   if (depthSlider) {
     depthSlider.addEventListener("input", (e) => {
@@ -104,6 +121,11 @@ function initCrawlControls() {
   if (actionsSlider) {
     actionsSlider.addEventListener("input", (e) => {
       document.getElementById("valMaxActions").innerText = e.target.value;
+    });
+  }
+  if (statesSlider) {
+    statesSlider.addEventListener("input", (e) => {
+      document.getElementById("valMaxStates").innerText = e.target.value;
     });
   }
   // Presets
@@ -260,9 +282,9 @@ async function validateUrl(url) {
 
 async function startAutonomousCrawl() {
   const url = document.getElementById("inputCrawlUrl").value.trim();
-  const maxDepth = parseInt(document.getElementById("crawlMaxDepth").value, 10) || 3;
-  const maxActions = parseInt(document.getElementById("crawlMaxActions").value, 10) || 20;
-  const maxStates = Math.min(10, maxDepth * 2);
+  const maxDepth = parseInt(document.getElementById("crawlMaxDepth").value, 10) || 4;
+  const maxActions = parseInt(document.getElementById("crawlMaxActions").value, 10) || 40;
+  const maxStates = parseInt(document.getElementById("crawlMaxStates").value, 10) || 20;
   const captureScreenshots = document.getElementById("crawlCaptureScreenshots").checked;
   const captureDom = document.getElementById("crawlCaptureDom").checked;
   const autonomous = document.getElementById("crawlAutonomous").checked;
@@ -308,7 +330,7 @@ async function startAutonomousCrawl() {
         max_depth: maxDepth,
         max_actions: maxActions,
         max_states: maxStates,
-        max_runtime_seconds: 180,
+        max_runtime_seconds: 300,
         same_domain_only: sameDomainOnly,
         capture_dom: captureDom,
         capture_screenshots: captureScreenshots,
@@ -582,7 +604,14 @@ async function loadCrawlSessions() {
 
   try {
     const res = await fetch("/api/crawl/sessions");
-    const data = await res.json();
+    const body = await res.text();
+    let data;
+    try {
+      data = JSON.parse(body);
+    } catch {
+      throw new Error(`Crawl Sessions API returned HTTP ${res.status}.`);
+    }
+    if (!res.ok) throw new Error(data.detail || `Crawl Sessions API returned HTTP ${res.status}.`);
     tbody.innerHTML = "";
 
     const sessions = data.sessions || [];
@@ -671,7 +700,7 @@ function initPRControls() {
     const btnFit = document.getElementById("btnFitGraph");
     if (btnFit) {
       btnFit.addEventListener("click", () => {
-        if (network) network.fit({ animation: { duration: 400 } });
+        fitKnowledgeGraph(true);
       });
     }
 
@@ -1037,6 +1066,8 @@ async function loadKnowledgeGraph(repo, prNumber) {
 
     if (network) network.destroy();
     network = new vis.Network(container, graphData, options);
+    network.once("stabilizationIterationsDone", () => fitKnowledgeGraph(false));
+    setTimeout(() => fitKnowledgeGraph(false), 80);
   } catch (err) {
     console.error("Knowledge Graph visualization error", err);
   }

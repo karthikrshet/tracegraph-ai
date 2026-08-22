@@ -13,7 +13,7 @@ It then reports only impact paths that Neo4j can traverse: `PR change → change
 The prototype deliberately goes deep on provenance, safe collection, and deterministic traversal. It is not a general production crawler.
 
 - The application URL, document URL, and code repository must describe the same product surface. The historical Saleor storefront/dashboard pairing is not a valid end-to-end evidence chain; select a repository with a public, corresponding UI before recording the final assignment run.
-- Browser crawling is bounded to 10 pages, 25 actions, depth 4, and 300 seconds. A bounded crawl can yield `COVERED`, `PARTIAL`, or `UNVERIFIED`; it never claims `ABSENT` without a separately recorded exhaustive-coverage certificate.
+- Browser crawling defaults to 20 screens, 40 navigations, depth 4, and 300 seconds; server-enforced ceilings are 25 screens, 60 navigations, depth 6, and 600 seconds. A bounded crawl can yield `COVERED`, `PARTIAL`, or `UNVERIFIED`; it never claims `ABSENT` without a separately recorded exhaustive-coverage certificate.
 - Code extraction is deterministic source parsing plus changed-declaration matching. Changes inside an existing function can be reported as an unmapped changed file rather than falsely assigned to a symbol.
 - Neo4j, Playwright, GitHub, and the selected document are required for a report. A missing dependency returns an error/503; it is not replaced with demo data.
 

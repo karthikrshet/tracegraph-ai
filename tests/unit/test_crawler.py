@@ -7,6 +7,7 @@ Unit tests for AutonomousCrawlerAgent:
 - Browser-observed transitions and screen relationships
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -160,11 +161,32 @@ def test_crawl_session_list_and_persistence(tmp_path: Path):
     assert isinstance(sessions, list)
 
 
+def test_crawl_session_history_normalises_legacy_naive_timestamps(tmp_path: Path):
+    """Persisted sessions from older versions must not break the Sessions API."""
+    from app.crawler.session_manager import CrawlSessionManager
+
+    crawl_dir = tmp_path / "artifacts" / "crawls" / "legacy"
+    crawl_dir.mkdir(parents=True)
+    (crawl_dir / "session.json").write_text(
+        json.dumps({
+            "id": "legacy",
+            "start_url": "https://example.com",
+            "started_at": "2025-01-01T00:00:00",
+            "configuration": {"start_url": "https://example.com"},
+        }),
+        encoding="utf-8",
+    )
+
+    sessions = CrawlSessionManager(data_dir=tmp_path).list_sessions()
+    assert len(sessions) == 1
+    assert sessions[0].started_at.tzinfo is not None
+
+
 def test_crawl_configuration_defaults():
     from app.crawler.session_manager import CrawlConfiguration
 
     config = CrawlConfiguration(start_url="https://demo.saleor.io")
-    assert config.max_depth == 3
+    assert config.max_depth == 4
     assert config.capture_screenshots is True
     assert config.capture_dom is True
     assert config.autonomous is True

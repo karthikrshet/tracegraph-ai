@@ -239,10 +239,10 @@ async def validate_url_endpoint(req: ValidateUrlRequest) -> dict[str, Any]:
 class CrawlStartRequest(BaseModel):
     url: str
     allow_custom_public_host: bool = True
-    max_depth: int = Field(default=3, ge=1, le=4)
-    max_actions: int = Field(default=20, ge=1, le=25)
-    max_states: int = Field(default=10, ge=1, le=10)
-    max_runtime_seconds: int = Field(default=180, ge=10, le=300)
+    max_depth: int = Field(default=4, ge=1, le=6)
+    max_actions: int = Field(default=40, ge=1, le=60)
+    max_states: int = Field(default=20, ge=1, le=25)
+    max_runtime_seconds: int = Field(default=300, ge=10, le=600)
     capture_dom: bool = True
     capture_screenshots: bool = True
     autonomous: bool = True

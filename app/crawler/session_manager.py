@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.models import Page, Transition, UIElement
 
@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 class CrawlConfiguration(BaseModel):
     crawl_id: str = ""
     start_url: str = ""
-    max_depth: int = Field(default=3, ge=1, le=4)
-    max_actions: int = Field(default=20, ge=1, le=25)
-    max_states: int = Field(default=10, ge=1, le=10)
-    max_runtime_seconds: int = Field(default=180, ge=10, le=300)
+    max_depth: int = Field(default=4, ge=1, le=6)
+    max_actions: int = Field(default=40, ge=1, le=60)
+    max_states: int = Field(default=20, ge=1, le=25)
+    max_runtime_seconds: int = Field(default=300, ge=10, le=600)
     same_domain_only: bool = True
     capture_screenshots: bool = True
     capture_dom: bool = True
@@ -63,6 +63,19 @@ class CrawlSession(BaseModel):
     transitions: list[Transition] = Field(default_factory=list)
     screen_graph: dict[str, list[str]] = Field(default_factory=dict)
     artifacts_dir: str = ""
+
+    @field_validator("started_at", "completed_at")
+    @classmethod
+    def normalise_legacy_datetimes(cls, value: datetime | None) -> datetime | None:
+        """Treat pre-timezone session metadata as UTC.
+
+        Older crawl records were written without an offset.  Normalising them
+        while loading keeps historical sessions readable and prevents Python
+        from comparing naive and aware timestamps while sorting the history.
+        """
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
 
 
 class CrawlSessionManager:
@@ -216,8 +229,9 @@ class CrawlSessionManager:
         try:
             pages, elements, transitions, screen_graph = await asyncio.wait_for(
                 agent.explore(
-                    max_pages=min(config.max_states, config.max_depth * 2),
+                    max_pages=config.max_states,
                     max_actions=config.max_actions,
+                    max_depth=config.max_depth,
                     same_domain_only=True,
                     capture_screenshots=config.capture_screenshots,
                     capture_dom=config.capture_dom,
