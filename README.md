@@ -51,19 +51,102 @@ LLM use is bounded to requirement extraction from a delimited, untrusted documen
 
 The dashboard's **QA Intelligence** tab renders only those checks. A claim with missing artifacts is `REJECTED`; a valid path below 0.50 confidence is `NEEDS_REVIEW`; only a verified path with a browser-observed transition can become an `APPROVED` test. It never produces a generic fallback checklist, synthetic test case, or ungrounded success state.
 
-## Run it
+## Complete local runbook
 
-Prerequisites: Python 3.10+, Docker with Compose, a Playwright-capable host, an OpenAI-compatible API key for real requirement extraction, and optionally a GitHub token to avoid public API rate limits.
+### 1. Prerequisites
+
+| Component | Required for | Notes |
+|---|---|---|
+| Python 3.10+ | Host CLI pipeline and tests | The CLI owns host Playwright when run outside Docker. |
+| Docker Desktop + Compose | Neo4j and local dashboard/API | Use Docker Desktop's Linux engine on Windows. |
+| Chromium for Playwright | Real browser crawl | Installed with `python -m playwright install chromium`. |
+| One real LLM provider key | Requirement extraction and report narration | OpenAI, Groq, xAI, or Grok-compatible configuration. A mock provider is rejected for an evidence run. |
+| GitHub token (recommended) | Public PR retrieval | Avoids public API rate limits; scope it read-only. |
+
+Choose a public application, product document, and GitHub repository that
+describe the **same product surface**. Do not reuse archived report files as a
+new run's evidence.
+
+### 2. Configure secrets and allowlists
+
+Create a local environment file. It is gitignored and must never be committed.
 
 ```bash
 cp .env.example .env
-# Set NEO4J_PASSWORD, OPENAI_API_KEY (or another supported provider),
-# ALLOWED_CRAWL_DOMAINS, ALLOWED_DOCUMENT_DOMAINS, and a GitHub token if needed.
+```
 
+Set at least the following values in `.env`:
+
+| Setting | Purpose | Example shape |
+|---|---|---|
+| `NEO4J_PASSWORD` | Password used by the local Neo4j container | Use a unique local secret. |
+| `LLM_PROVIDER`, provider key, `LLM_MODEL` | Real extraction/narration provider | `LLM_PROVIDER=groq` plus `GROQ_API_KEY=...` |
+| `ALLOWED_CRAWL_DOMAINS` | Comma-separated application hosts approved for crawling | `demo.realworld.show` |
+| `ALLOWED_DOCUMENT_DOMAINS` | Comma-separated documentation hosts approved for ingestion | `github.com,raw.githubusercontent.com` |
+| `GITHUB_TOKEN` | Optional read-only token for PR retrieval | Leave blank only if public rate limits are acceptable. |
+| `TARGET_REPO`, `TARGET_PR` | Optional dashboard defaults | `owner/repository`, `123` |
+
+The crawler validates DNS before navigation and rejects private, loopback,
+link-local, metadata, and redirect-to-private destinations. Adding a host to an
+allowlist does not disable those checks.
+
+### 3. Start local services
+
+Start Neo4j first. `-d` means detached/background: Compose returns to the shell
+while the service keeps running.
+
+```bash
 docker compose up -d neo4j
+docker compose ps
+```
+
+The expected state is `tracegraph-neo4j` with `healthy` status. Then start the
+local API/dashboard, which serves the UI on port 8000 and shares the local
+`data/` evidence directory with the host:
+
+```bash
+docker compose up -d --build api
+docker compose ps
+```
+
+Open these local-only services:
+
+| URL | Purpose |
+|---|---|
+| [http://localhost:8000](http://localhost:8000) | TraceGraph dashboard |
+| [http://localhost:8000/api/docs](http://localhost:8000/api/docs) | OpenAPI / interactive endpoint docs |
+| [http://localhost:7474](http://localhost:7474) | Neo4j Browser (bound to loopback only) |
+
+Useful diagnostics:
+
+```bash
+docker compose ps
+docker compose logs --tail=100 api
+docker compose logs --tail=100 neo4j
+```
+
+To stop local services without deleting evidence or Neo4j data, run
+`docker compose down`. Do **not** add `-v` unless you intentionally want to
+delete the local Neo4j volumes.
+
+### 4. Install host CLI dependencies
+
+Use this when running `scripts/run_pipeline.py` directly from the host. The
+dashboard/API container already has its own application dependencies.
+
+```bash
 python -m pip install -e ".[dev]"
 python -m playwright install chromium
+```
 
+### 5. Run one real end-to-end pipeline
+
+The CLI performs five fail-closed stages: ingest selected specification, crawl
+the live application, fetch immutable PR code, build Neo4j, and compute the
+blast radius. It intentionally uses a narrow 5-page/5-action crawl budget for
+an assignment run. If any stage lacks evidence, it exits without a report.
+
+```bash
 python scripts/run_pipeline.py \
   --repo OWNER/REPOSITORY \
   --pr 123 \
@@ -71,24 +154,30 @@ python scripts/run_pipeline.py \
   --spec-url https://docs.example.com/feature
 ```
 
-### Windows / Docker Desktop
+The currently documented, real reference combination is:
 
-The live pipeline needs Docker Desktop's **Linux** engine for Neo4j. Before
-running Compose, start Docker Desktop from the Start menu and wait until it
-reports **Engine running**. If `docker version` does not show both `Client` and
-`Server`, Docker Desktop is stopped, still starting, or configured for Windows
-containers; switch it to Linux containers before continuing.
+- Application: `https://demo.realworld.show/`
+- Repository: `realworld-apps/angular-realworld-example-app`
+- PR: `350`
+- Specification: the repository's public README on `raw.githubusercontent.com`
 
-In Windows Command Prompt, put the pipeline command on **one line** (a trailing
-`\` is a Bash continuation character and does not work in `cmd.exe`):
+Use a plain URL in the terminal—not Markdown such as `[url](url)`.
+
+#### Windows / Docker Desktop
+
+Before using Compose, start Docker Desktop and wait for **Engine running**. If
+`docker version` does not show both `Client` and `Server`, it is not ready or is
+configured for Windows containers rather than Linux containers.
+
+In Windows Command Prompt, the command must be one line because `\` is a Bash
+continuation character:
 
 ```cmd
 docker compose up -d neo4j
-docker compose ps
 python scripts/run_pipeline.py --repo realworld-apps/angular-realworld-example-app --pr 350 --crawl-url https://demo.realworld.show/ --spec-url https://raw.githubusercontent.com/realworld-apps/angular-realworld-example-app/main/README.md
 ```
 
-In PowerShell, use a backtick for a multi-line command:
+In PowerShell, use a backtick for multiline input:
 
 ```powershell
 python scripts/run_pipeline.py `
@@ -98,19 +187,86 @@ python scripts/run_pipeline.py `
   --spec-url https://raw.githubusercontent.com/realworld-apps/angular-realworld-example-app/main/README.md
 ```
 
-The command exits without a report if any evidence source is unavailable. A successful run writes `data/blast_radius_pr_<number>.json` and Markdown alongside the raw, run-specific crawl/code artifacts.
+### 6. Use the dashboard workflow
 
-To use the dashboard:
+1. Open [http://localhost:8000](http://localhost:8000).
+2. In **Web Crawler**, validate a public target, run a bounded crawl, and inspect
+   the saved screenshots, downloaded DOM snapshots, and transitions.
+3. In **Specification**, enter either one approved public documentation URL or
+   pasted requirement text, then ingest it. The dashboard never displays a seed
+   requirements table on a first run.
+4. Select the same completed crawl and use **Apply to Graph**, then build the
+   three-layer graph for the repository and PR.
+5. In **Blast Radius**, request the provenance-verified report. A graph,
+   completed crawl, public spec, immutable GitHub evidence, and real LLM
+   configuration are all required.
+6. In **QA Intelligence**, choose the completed crawl used by the report.
+   The evidence verifier checks graph hops, stored DOM/screenshots, and observed
+   transitions before producing reviewer-ready tests.
+
+The dashboard can also be started from the host instead of Compose:
 
 ```bash
 uvicorn app.api.main:app --reload --port 8000
 ```
 
-Start with a live crawl and an explicit documentation URL. Select the same crawl ID when building the graph; the API rejects graph builds with missing requirements, incomplete crawl data, missing code evidence, or unavailable Neo4j.
+For this host mode, `.env` must use `NEO4J_URI=bolt://localhost:7687`. The
+Compose API uses `bolt://neo4j:7687` internally and configures that for you.
 
-### Deployment boundary
+### 7. HTTP API
 
-The full evidence pipeline requires the Docker API runtime (or an equivalent dedicated worker) because it owns a Playwright browser, server-sent crawl progress, writable artifact storage, and Neo4j connectivity. A Vercel deployment can host the dashboard and read-only API preview, but it intentionally returns **Worker required** for a live crawl rather than fabricating DOM, screenshot, or session evidence. Use the Docker deployment for the Loom and final evidence run.
+In development, endpoints are available on the local dashboard/API. In staging
+or production, operational endpoints require `Authorization: Bearer
+<API_BEARER_TOKEN>`. Endpoint schemas and request bodies are available at
+[`/api/docs`](http://localhost:8000/api/docs).
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/health` | Checks API reachability and configured repository/PR defaults. |
+| `GET /api/agents`, `GET /api/agents/{name}` | Shows the bounded authority and failure behavior of each agent stage. |
+| `POST /api/ingest` | Extracts requirements from approved public documentation or pasted text. |
+| `POST /api/crawl/validate-url`, `POST /api/crawl` | Validates a target then starts a real browser crawl. |
+| `GET /api/crawl/sessions`, `/api/crawl/{id}/pages`, `/transitions` | Lists persisted sessions and captured evidence. |
+| `POST /api/crawl/{id}/apply-to-graph` | Stages exactly one completed crawl for graph construction. |
+| `POST /api/analyze-code`, `POST /api/build-graph` | Retrieves immutable PR evidence and builds the three-layer graph. |
+| `POST /api/analyze-pr/{pr}` and `GET /api/report/{pr}` | Creates or reads a provenance-verified blast-radius report. |
+| `GET /api/qa-analysis/{pr}?crawl_id={id}` | Verifies report/crawl evidence and generates only grounded QA cases. |
+| `GET /api/graph/nodes`, `/api/graph/visualize`, `/api/requirements`, `/api/flows` | Reads the active graph and coverage results. |
+| `POST /api/graph/query` | Runs a single guarded read-only Cypher query. |
+
+Example read-only checks:
+
+```bash
+curl http://localhost:8000/api/health
+curl http://localhost:8000/api/agents
+curl "http://localhost:8000/api/report/350?repo=realworld-apps/angular-realworld-example-app"
+curl "http://localhost:8000/api/qa-analysis/350?crawl_id=YOUR_COMPLETED_CRAWL_ID&repo=realworld-apps/angular-realworld-example-app"
+```
+
+### 8. Evidence output and verification
+
+Each successful run writes immutable, run-specific evidence under `data/`:
+
+| Path | Contents |
+|---|---|
+| `data/artifacts/crawls/<crawl-id>/` | Crawl session metadata, full-page screenshots, and DOM snapshots. |
+| `data/pr_<normalized-repo>_<pr>_*.jsonl` | Retrieved immutable PR metadata, changed files, code files, and parsed symbols. |
+| `data/requirements.jsonl` | Requirements from the most recently selected public source. |
+| `data/blast_radius_pr_<pr>.json` and `.md` | Deterministic graph-traversal report. |
+| `data/run_manifests/<run>.json` | Hashes and provenance references for the exact evidence run. |
+
+The reference evidence record is [docs/evidence_run_pr_350.md](docs/evidence_run_pr_350.md). It documents an actual completed run; rerunning the pipeline creates a new crawl ID and manifest rather than overwriting its provenance.
+
+### 9. Troubleshooting
+
+| Symptom | Meaning and resolution |
+|---|---|
+| `localhost:8000 refused to connect` | Neo4j alone is running. Start the dashboard/API with `docker compose up -d --build api`, then inspect `docker compose logs --tail=100 api`. |
+| `dockerDesktopLinuxEngine ... file not found` | Docker Desktop is stopped. Start it and wait for `docker version` to show a Server section. |
+| `Host ... is not in the configured allowlist` | Add only the intended public host to `ALLOWED_CRAWL_DOMAINS` in `.env`, then re-run the CLI or restart the API. Private and metadata IP protections remain active. |
+| `Missing option --repo` or `--repo is not recognized` | A Bash `\` was pasted into Command Prompt. Use the one-line CMD command above or PowerShell backticks. |
+| `Worker required` on Vercel | Expected: Vercel serverless cannot run a durable Playwright crawl. Use the Docker deployment or a dedicated browser worker. |
+| No report / `409` | Treat it as an evidence gate. Check the selected document, completed crawl, Neo4j health, GitHub retrieval, and real LLM configuration; do not substitute output. |
 
 ## Evaluation
 
