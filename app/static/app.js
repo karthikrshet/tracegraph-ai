@@ -892,17 +892,17 @@ async function loadCrawlSessions() {
         : `<span class="badge badge-unverified">${status}</span>`;
 
       row.innerHTML = `
-        <td><code>${escapeHtml(sessionId)}</code></td>
-        <td><small>${escapeHtml(s.start_url)}</small></td>
+        <td><code class="session-id" title="${escapeHtml(sessionId)}">${escapeHtml(sessionId)}</code></td>
+        <td><small class="session-url" title="${escapeHtml(s.start_url)}">${escapeHtml(s.start_url)}</small></td>
         <td>${statusBadge}</td>
         <td><strong>${s.pages_discovered}</strong></td>
         <td><strong>${s.transitions_discovered}</strong></td>
         <td><small>${s.started_at ? s.started_at.split("T")[0] : "—"}</small></td>
-        <td>
+        <td><div class="session-actions">
           ${s.status === "COMPLETED" ? `<button class="btn btn-tool" data-graph-session-id="${escapeHtml(sessionId)}">Use for Graph</button>` : ""}
           <button class="btn btn-tool" data-session-id="${escapeHtml(sessionId)}">Screens</button>
           <button class="btn btn-tool" data-transition-session-id="${escapeHtml(sessionId)}">Transitions</button>
-        </td>
+        </div></td>
       `;
       row.querySelector("[data-session-id]").addEventListener("click", () => viewDiscoveredScreens(sessionId));
       row.querySelector("[data-transition-session-id]").addEventListener("click", () => viewDiscoveredTransitions(sessionId));

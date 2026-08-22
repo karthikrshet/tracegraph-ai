@@ -183,35 +183,35 @@
         <div class="tab-strip">
           <button class="tab-item active" data-tab="crawlView">
             <i data-lucide="compass"></i>
-            <span>Web Crawler</span>
+            <span class="tab-label">Web Crawler</span>
           </button>
           <button class="tab-item" data-tab="ingestView">
             <i data-lucide="file-text"></i>
-            <span>Specification</span>
+            <span class="tab-label">Specification</span>
           </button>
           <button class="tab-item" data-tab="graphView">
             <i data-lucide="network"></i>
-            <span>3-Layer Graph</span>
+            <span class="tab-label">3-Layer Graph</span>
           </button>
           <button class="tab-item" data-tab="blastRadiusView">
             <i data-lucide="crosshair"></i>
-            <span>Blast Radius</span>
+            <span class="tab-label">Blast Radius</span>
           </button>
           <button class="tab-item" data-tab="qaView">
             <i data-lucide="clipboard-check"></i>
-            <span>QA Intelligence</span>
+            <span class="tab-label">QA Intelligence</span>
           </button>
           <button class="tab-item" data-tab="evidenceView">
             <i data-lucide="route"></i>
-            <span>Evidence Chains</span>
+            <span class="tab-label">Evidence Chains</span>
           </button>
           <button class="tab-item" data-tab="coverageView">
             <i data-lucide="table-2"></i>
-            <span>4-State Matrix</span>
+            <span class="tab-label">4-State Matrix</span>
           </button>
           <button class="tab-item" data-tab="sessionsView">
             <i data-lucide="folder-archive"></i>
-            <span>Crawl Sessions</span>
+            <span class="tab-label">Crawl Sessions</span>
           </button>
         </div>
 
@@ -495,20 +495,22 @@
               </button>
             </div>
 
-            <table class="styled-table" id="tableCrawlSessions">
-              <thead>
-                <tr>
-                  <th>Crawl ID</th>
-                  <th>Target URL</th>
-                  <th>Status</th>
-                  <th>Discovered Pages</th>
-                  <th>Transitions</th>
-                  <th>Started At</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
+            <div class="table-scroll" aria-label="Crawl session history">
+              <table class="styled-table" id="tableCrawlSessions">
+                <thead>
+                  <tr>
+                    <th>Crawl ID</th>
+                    <th>Target URL</th>
+                    <th>Status</th>
+                    <th>Discovered Pages</th>
+                    <th>Transitions</th>
+                    <th>Started At</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
           </div>
         </div>
 

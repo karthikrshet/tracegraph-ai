@@ -421,18 +421,23 @@ input[type="text"]:focus, input[type="number"]:focus {
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  padding: 12px 18px;
+  padding: 12px 12px;
   font-family: var(--font-sans);
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
+  gap: 7px;
+  flex: 1 0 auto;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
   transition: all 0.15s;
+}
+
+.tab-item .tab-label {
+  display: block;
+  white-space: nowrap;
 }
 
 .tab-item:hover {
@@ -619,16 +624,55 @@ input[type="text"]:focus, input[type="number"]:focus {
   background-color: var(--bg-card-hover);
 }
 
+.table-scroll {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.table-scroll .styled-table {
+  margin: 0;
+}
+
 #tableCrawlSessions {
-  min-width: 980px;
+  min-width: 860px;
+  table-layout: fixed;
 }
 
-#tableCrawlSessions td:last-child {
-  min-width: 156px;
+#tableCrawlSessions th:nth-child(1), #tableCrawlSessions td:nth-child(1) { width: 22%; }
+#tableCrawlSessions th:nth-child(2), #tableCrawlSessions td:nth-child(2) { width: 22%; }
+#tableCrawlSessions th:nth-child(3), #tableCrawlSessions td:nth-child(3) { width: 11%; }
+#tableCrawlSessions th:nth-child(4), #tableCrawlSessions td:nth-child(4) { width: 11%; }
+#tableCrawlSessions th:nth-child(5), #tableCrawlSessions td:nth-child(5) { width: 10%; }
+#tableCrawlSessions th:nth-child(6), #tableCrawlSessions td:nth-child(6) { width: 12%; }
+#tableCrawlSessions th:nth-child(7), #tableCrawlSessions td:nth-child(7) { width: 12%; }
+
+#tableCrawlSessions td {
+  padding: 10px 12px;
 }
 
-#tableCrawlSessions .btn-tool {
-  margin: 2px 0;
+#tableCrawlSessions .session-id,
+#tableCrawlSessions .session-url {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-actions {
+  display: grid;
+  gap: 5px;
+}
+
+.session-actions .btn-tool {
+  justify-content: center;
+  width: 100%;
+  margin: 0;
+  min-height: 30px;
+  padding: 5px 7px;
+  font-size: 0.72rem;
 }
 
 #qaView .input-with-action {
