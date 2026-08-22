@@ -583,20 +583,30 @@ async function viewDiscoveredTransitions(crawlId) {
 
 async function applyCrawlToGraph(crawlId) {
   if (!crawlId) return;
+  const repoInput = document.getElementById("inputRepo");
+  const prInput = document.getElementById("inputPRNumber");
+  const repo = repoInput.value.trim();
+  const prNumber = Number.parseInt(prInput.value, 10);
+  if (!repo || !Number.isInteger(prNumber)) {
+    appendFeedLine("ERROR", "A GitHub repository and real PR number are required before building the three-layer graph.");
+    repoInput.focus();
+    showGraphSetupMessage("Enter the matching GitHub repository and PR in the left panel, then build the three-layer graph.");
+    return;
+  }
+
+  const applyButton = document.getElementById("btnApplyCrawlToGraph");
+  if (applyButton?.disabled) return;
+  if (applyButton) {
+    applyButton.disabled = true;
+    applyButton.innerHTML = "<i data-lucide='loader-circle'></i><span>Building…</span>";
+    lucide.createIcons();
+  }
   try {
     appendFeedLine("SYSTEM", `Staging discovered artifacts from ${crawlId} for graph construction...`);
     const res = await fetch(`/api/crawl/${crawlId}/apply-to-graph`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Could not stage crawl evidence.");
     appendFeedLine("SYSTEM", data.message || "Crawl evidence staged.");
-
-    const repo = document.getElementById("inputRepo").value.trim();
-    const prNumber = Number.parseInt(document.getElementById("inputPRNumber").value, 10);
-    if (!repo || !Number.isInteger(prNumber)) {
-      appendFeedLine("SYSTEM", "Crawl evidence is staged. Enter the matching GitHub repository and PR, then click Re-Index Graph to build all three layers.");
-      showGraphSetupMessage("Crawl evidence is staged. Select the matching GitHub repository and PR in Blast Radius, then click Re-Index Graph.");
-      return;
-    }
 
     appendFeedLine("SYSTEM", `Building Requirements → UI → Code graph for ${repo}#${prNumber}...`);
     const buildResponse = await fetch("/api/build-graph", {
@@ -614,6 +624,12 @@ async function applyCrawlToGraph(crawlId) {
     await loadKnowledgeGraph(repo, prNumber);
   } catch (err) {
     appendFeedLine("ERROR", `Failed to apply to graph: ${err.message}`);
+  } finally {
+    if (applyButton) {
+      applyButton.disabled = false;
+      applyButton.innerHTML = "<i data-lucide='database'></i><span>Build 3-Layer Graph</span>";
+      lucide.createIcons();
+    }
   }
 }
 
@@ -749,6 +765,11 @@ function initPRControls() {
       const pr = parseInt(document.getElementById("inputPRNumber").value, 10);
       if (!currentCrawlId) {
         alert("Run and select a completed crawl before building the knowledge graph.");
+        return;
+      }
+      if (!repo || !Number.isInteger(pr)) {
+        setAnalysisUnavailable("Enter the matching GitHub repository and real PR number before building the three-layer graph.");
+        document.getElementById("inputRepo").focus();
         return;
       }
       btnReindex.disabled = true;
