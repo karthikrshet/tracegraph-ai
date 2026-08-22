@@ -51,6 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initCrawlControls();
   initSpecIngestControls();
   initPRControls();
+  initQAControls();
   loadInitialData();
   loadIngestedRequirements();
   loadDocumentSourcePolicy();
@@ -89,6 +90,9 @@ function initTabs() {
       }
       if (targetId === "ingestView") {
         loadIngestedRequirements();
+      }
+      if (targetId === "qaView") {
+        loadQACrawlSessions();
       }
     });
   });
@@ -170,6 +174,144 @@ function initCrawlControls() {
   const btnRefreshSessions = document.getElementById("btnRefreshSessions");
   if (btnRefreshSessions) {
     btnRefreshSessions.addEventListener("click", loadCrawlSessions);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 2.25 Evidence-grounded QA planning
+// ─────────────────────────────────────────────────────────────
+function initQAControls() {
+  const refresh = document.getElementById("btnRefreshQASessions");
+  if (refresh) refresh.addEventListener("click", loadQACrawlSessions);
+
+  const run = document.getElementById("btnRunQAAnalysis");
+  if (run) run.addEventListener("click", loadQAAnalysis);
+}
+
+function setQAStatus(message, className = "text-muted") {
+  const status = document.getElementById("qaAnalysisStatus");
+  if (!status) return;
+  status.className = className;
+  status.textContent = message;
+}
+
+function setQAEmptyState(message) {
+  const columns = { tableQAAgentTrace: 3, tableQAVerification: 4, tableQATests: 5 };
+  Object.entries(columns).forEach(([tableId, columnCount]) => {
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    if (tbody) tbody.innerHTML = `<tr><td colspan="${columnCount}" class="text-muted">${escapeHtml(message)}</td></tr>`;
+  });
+  const unknowns = document.getElementById("qaUnknowns");
+  if (unknowns) unknowns.innerHTML = "";
+}
+
+async function loadQACrawlSessions() {
+  const select = document.getElementById("qaCrawlId");
+  if (!select) return;
+  const previous = select.value || currentCrawlId || "";
+  try {
+    const res = await fetch("/api/crawl/sessions");
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "Could not load crawl sessions.");
+    const completed = (data.sessions || []).filter(session => session.status === "COMPLETED" && session.pages_discovered > 0);
+    select.replaceChildren();
+    const initial = document.createElement("option");
+    initial.value = "";
+    initial.textContent = completed.length ? "Select a completed crawl" : "No completed crawls available";
+    select.appendChild(initial);
+    completed.forEach(session => {
+      const option = document.createElement("option");
+      option.value = session.id;
+      option.textContent = `${session.id} — ${session.start_url} (${session.pages_discovered} pages)`;
+      select.appendChild(option);
+    });
+    if (previous && completed.some(session => session.id === previous)) select.value = previous;
+  } catch (err) {
+    setQAStatus(`Unable to load completed crawls: ${err.message}`, "text-rose");
+  }
+}
+
+function qaBadge(status) {
+  const normalized = String(status || "").toUpperCase();
+  if (normalized === "VERIFIED" || normalized === "APPROVED") return "badge badge-covered";
+  if (normalized === "NEEDS_REVIEW") return "badge badge-partial";
+  if (normalized === "REJECTED" || normalized === "INSUFFICIENT_EVIDENCE") return "badge badge-absent";
+  return "badge badge-unverified";
+}
+
+async function loadQAAnalysis() {
+  const select = document.getElementById("qaCrawlId");
+  const crawlId = select?.value || "";
+  const repo = document.getElementById("inputRepo")?.value.trim() || "";
+  const prNumber = document.getElementById("inputPRNumber")?.value.trim() || "";
+  if (!crawlId) {
+    setQAStatus("Select a completed crawl session first.", "text-rose");
+    return;
+  }
+  if (!/^\d+$/.test(prNumber)) {
+    setQAStatus("Analyze a pull request first so the QA plan has a provenance-verified report.", "text-rose");
+    return;
+  }
+  const runButton = document.getElementById("btnRunQAAnalysis");
+  if (runButton) runButton.disabled = true;
+  setQAStatus("Verifying report paths, stored DOM/screenshots, and observed transitions…", "text-muted");
+  try {
+    const query = new URLSearchParams({ crawl_id: crawlId });
+    if (repo) query.set("repo", repo);
+    const res = await fetch(`/api/qa-analysis/${encodeURIComponent(prNumber)}?${query.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || "QA evidence verification failed.");
+    renderQAAnalysis(data);
+    const summary = data.summary || {};
+    setQAStatus(
+      `${summary.claims_checked || 0} claims checked; ${summary.tests_generated || 0} evidence-grounded test cases generated.`,
+      "text-emerald"
+    );
+  } catch (err) {
+    setQAEmptyState("No QA plan available until the report and selected crawl can be verified.");
+    setQAStatus(err.message, "text-rose");
+  } finally {
+    if (runButton) runButton.disabled = false;
+  }
+}
+
+function renderQAAnalysis(data) {
+  const traceBody = document.querySelector("#tableQAAgentTrace tbody");
+  if (traceBody) {
+    const trace = data.agent_trace || [];
+    traceBody.innerHTML = trace.length ? trace.map(step => {
+      const details = Object.entries(step)
+        .filter(([key]) => key !== "agent" && key !== "status")
+        .map(([key, value]) => `${escapeHtml(key.replaceAll("_", " "))}: ${escapeHtml(value)}`)
+        .join(" · ");
+      return `<tr><td><code>${escapeHtml(step.agent)}</code></td><td><span class="${qaBadge(step.status)}">${escapeHtml(step.status)}</span></td><td>${details || "—"}</td></tr>`;
+    }).join("") : `<tr><td colspan="3" class="text-muted">No agent execution trace was recorded.</td></tr>`;
+  }
+
+  const verdictBody = document.querySelector("#tableQAVerification tbody");
+  if (verdictBody) {
+    const verdicts = data.verification || [];
+    verdictBody.innerHTML = verdicts.length ? verdicts.map(verdict => {
+      const reason = (verdict.reasons || []).join(" ") || (verdict.evidence || []).slice(0, 2).join(" · ");
+      return `<tr><td>${escapeHtml(verdict.claim)}</td><td><span class="${qaBadge(verdict.status)}">${escapeHtml(verdict.status)}</span></td><td><code>${escapeHtml(Number(verdict.confidence || 0).toFixed(3))}</code></td><td>${escapeHtml(reason || "—")}</td></tr>`;
+    }).join("") : `<tr><td colspan="4" class="text-muted">No report claims were available for verification.</td></tr>`;
+  }
+
+  const testBody = document.querySelector("#tableQATests tbody");
+  if (testBody) {
+    const tests = data.generated_tests || [];
+    testBody.innerHTML = tests.length ? tests.map(test => {
+      const evidence = (test.evidence || []).slice(-1).join("");
+      return `<tr><td><code>${escapeHtml(test.id)}</code></td><td><strong>${escapeHtml(test.title)}</strong><br><small>${escapeHtml(test.expected_result)}</small></td><td><span class="badge badge-unverified">${escapeHtml(test.priority)}</span></td><td><span class="${qaBadge(test.status)}">${escapeHtml(test.status)}</span></td><td><small>${escapeHtml(evidence || "—")}</small></td></tr>`;
+    }).join("") : `<tr><td colspan="5" class="text-muted">No test was generated: an observed impacted transition is required.</td></tr>`;
+  }
+
+  const unknowns = document.getElementById("qaUnknowns");
+  if (unknowns) {
+    const items = data.what_we_dont_know || [];
+    unknowns.innerHTML = items.length
+      ? items.map(item => `<li class="evidence-card">${escapeHtml(item)}</li>`).join("")
+      : '<li class="text-muted">No additional uncertainty was reported for this bounded analysis.</li>';
   }
 }
 

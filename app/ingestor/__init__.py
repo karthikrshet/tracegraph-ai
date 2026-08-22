@@ -30,122 +30,6 @@ from app.models import CoverageStatus, Requirement
 
 logger = logging.getLogger(__name__)
 
-# ── Documentation sources to ingest ─────────────────────────
-DOC_SOURCES = [
-    {
-        "url": "https://docs.saleor.io/developer/products",
-        "category": "product",
-    },
-    {
-        "url": "https://docs.saleor.io/developer/checkout",
-        "category": "checkout",
-    },
-    {
-        "url": "https://docs.saleor.io/developer/cart",
-        "category": "cart",
-    },
-    {
-        "url": "https://docs.saleor.io/developer/attribute",
-        "category": "product_attributes",
-    },
-    {
-        "url": "https://github.com/saleor/saleor-dashboard/blob/main/README.md",
-        "category": "general",
-    },
-]
-
-# ── Hardcoded requirements for offline / resilience mode ────
-# These represent well-understood Saleor product requirements
-# captured from docs.saleor.io and the Saleor feature set.
-# Used when live docs are unavailable.
-SEED_REQUIREMENTS: list[dict[str, Any]] = [
-    {
-        "id": "REQ-001",
-        "text": "Users can browse product listings and view product details including name, description, price, and images",
-        "category": "product",
-        "testability_score": 0.95,
-    },
-    {
-        "id": "REQ-002",
-        "text": "Products can have attributes (color, size, material etc.) with selectable values presented as dropdown menus",
-        "category": "product_attributes",
-        "testability_score": 0.92,
-    },
-    {
-        "id": "REQ-003",
-        "text": "Product attribute dropdowns must show available values and allow users to search/filter options",
-        "category": "product_attributes",
-        "testability_score": 0.94,
-    },
-    {
-        "id": "REQ-004",
-        "text": "Users can add products to cart from the product detail page",
-        "category": "cart",
-        "testability_score": 0.98,
-    },
-    {
-        "id": "REQ-005",
-        "text": "Users can view and manage items in their shopping cart",
-        "category": "cart",
-        "testability_score": 0.97,
-    },
-    {
-        "id": "REQ-006",
-        "text": "Users can proceed from cart to checkout and enter shipping address",
-        "category": "checkout",
-        "testability_score": 0.96,
-    },
-    {
-        "id": "REQ-007",
-        "text": "Users can select shipping method during checkout",
-        "category": "checkout",
-        "testability_score": 0.93,
-    },
-    {
-        "id": "REQ-008",
-        "text": "Users can enter payment information and complete an order",
-        "category": "checkout",
-        "testability_score": 0.95,
-    },
-    {
-        "id": "REQ-009",
-        "text": "Product variants (e.g. size S/M/L, color Red/Blue) must each have their own independent attribute selections",
-        "category": "product_attributes",
-        "testability_score": 0.90,
-    },
-    {
-        "id": "REQ-010",
-        "text": "Attribute dropdown selections must be preserved when navigating between form fields",
-        "category": "product_attributes",
-        "testability_score": 0.88,
-    },
-    {
-        "id": "REQ-011",
-        "text": "Users can create new attribute values directly from the attribute dropdown (Add new value)",
-        "category": "product_attributes",
-        "testability_score": 0.85,
-    },
-    {
-        "id": "REQ-012",
-        "text": "Swatch attribute dropdowns (color swatches) must display color previews alongside option labels",
-        "category": "product_attributes",
-        "testability_score": 0.87,
-    },
-    {
-        "id": "REQ-013",
-        "text": "Product create and update pages must support assigning attribute values",
-        "category": "product",
-        "testability_score": 0.93,
-    },
-    {
-        "id": "REQ-014",
-        "text": "Page (CMS) models must support attribute assignment with the same attribute UI as products",
-        "category": "content",
-        "testability_score": 0.80,
-    },
-]
-
-
 class RequirementIngestor:
     """
     Ingest product documentation and extract structured Requirements.
@@ -163,29 +47,11 @@ class RequirementIngestor:
 
     async def run(
         self,
-        use_seeds: bool = False,
         source_urls: list[str] | None = None,
         source_text: str = "",
     ) -> list[Requirement]:
-        """Run ingestion from explicit public documentation sources.
-
-        Seed data is retained solely for deterministic unit tests and must be opted
-        into explicitly; it is never a silent production fallback.
-        """
+        """Run ingestion from explicit public documentation sources or pasted text."""
         requirements: list[Requirement] = []
-
-        if use_seeds:
-            logger.info("Loading %d seed requirements", len(SEED_REQUIREMENTS))
-            for raw in SEED_REQUIREMENTS:
-                req = Requirement(
-                    id=raw["id"],
-                    text=raw["text"],
-                    category=raw["category"],
-                    testability_score=raw["testability_score"],
-                    source_url="seed://tracegraph-ai/requirements",
-                    coverage_status=CoverageStatus.UNVERIFIED,
-                )
-                requirements.append(req)
 
         if source_urls:
             live_reqs = await self._fetch_live_requirements(source_urls, start_id=len(requirements) + 1)

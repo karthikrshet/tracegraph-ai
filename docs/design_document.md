@@ -77,6 +77,8 @@ Stage 4: Cross-Layer Evidence Linking   → DETERMINISTIC name/selector heuristi
 Stage 5: Multi-Hop Graph Traversal      → DETERMINISTIC (Neo4j Cypher BFS)
 Stage 6: Hop-Weight Confidence Model    → DETERMINISTIC (monotonically decreasing product)
 Stage 7: Non-Engineer Blast Report      → LLM (narrates already-determined graph facts)
+Stage 8: QA Evidence Verification        → DETERMINISTIC (path + artifact + transition checks)
+Stage 9: Reviewer-ready Test Planning    → DETERMINISTIC template over verified transitions
 ```
 
 ### Why This Decomposition Matters
@@ -106,6 +108,14 @@ Every single impact claim is an auditable, reproducible graph path.
 | Knowledge Graph Traversal | ✅ | | Cypher BFS traversal — mathematical truth |
 | Confidence Arithmetic | ✅ | | Dynamic scaling by symbol type, token overlap, and testability ($C = \prod w_i$) |
 | Executive Summary & Narrative | | ✅ | Explains already-computed graph paths in natural language |
+| QA Evidence Verification | ✅ | | Rejects claims whose graph path, crawl element, page DOM, or screenshot is missing |
+| Test Generation & Review | ✅ | | Emits a test only for a verified browser-observed transition; low confidence remains `NEEDS_REVIEW` |
+
+### 3.2 QA intelligence is a gate, not a second source of truth
+
+The QA layer has deliberately narrow authority. `crawl_agent`, `requirement_agent`, `code_agent`, `mapping_agent`, and `impact_agent` create their own evidence artifacts; the QA layer reads those immutable artifacts and cannot fetch, infer, or repair them. The public agent registry (`GET /api/agents`) documents each stage's input/output contract, tools, failure behavior, and escalation boundary.
+
+For a selected report/crawl pair, the `evidence_verifier` requires the exact graph-hop shape and resolves the referenced `UIElement` against the persisted crawl. It then verifies a captured DOM and screenshot on the corresponding `Page`. The `test_generator` can only produce navigation steps from a persisted `Transition`; `test_reviewer` approves only verified paths at confidence ≥ 0.50; `test_humanizer` only formats that already-approved evidence for a QA lead. Missing evidence returns `REJECTED`, low confidence returns `NEEDS_REVIEW`, and neither becomes a test case.
 
 ### 3.1 Crawl Control Center & Real-Time Observability
 

@@ -197,6 +197,10 @@
             <i data-lucide="crosshair"></i>
             <span>Blast Radius</span>
           </button>
+          <button class="tab-item" data-tab="qaView">
+            <i data-lucide="clipboard-check"></i>
+            <span>QA Intelligence</span>
+          </button>
           <button class="tab-item" data-tab="evidenceView">
             <i data-lucide="route"></i>
             <span>Evidence Chains</span>
@@ -628,6 +632,80 @@
                 </thead>
                 <tbody></tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- QA Intelligence: evidence verifier + deterministic test planning -->
+        <div class="tab-panel" id="qaView">
+          <div class="report-content">
+            <div class="panel-header">
+              <div>
+                <h2>Evidence-Grounded QA Plan</h2>
+                <p class="panel-subtitle">Tests are generated only from a provenance-verified PR report, a completed crawl, captured DOM/screenshots, and browser-observed transitions.</p>
+              </div>
+            </div>
+
+            <div class="section-box" style="margin-bottom: 20px;">
+              <div class="section-title">
+                <i data-lucide="shield-check" class="icon-sm text-cyan"></i>
+                <span>QA Analysis Input</span>
+              </div>
+              <div class="input-with-action" style="max-width: 760px;">
+                <select id="qaCrawlId" aria-label="Completed crawl session for QA evidence">
+                  <option value="">Load completed crawl sessions first</option>
+                </select>
+                <button class="btn btn-secondary" id="btnRefreshQASessions" type="button">
+                  <i data-lucide="refresh-cw" class="icon-sm"></i>
+                  <span>Refresh Sessions</span>
+                </button>
+                <button class="btn btn-primary" id="btnRunQAAnalysis" type="button">
+                  <i data-lucide="clipboard-check" class="icon-sm"></i>
+                  <span>Verify & Generate Plan</span>
+                </button>
+              </div>
+              <p id="qaAnalysisStatus" class="text-muted" style="margin: 12px 0 0;">No QA analysis loaded. Select a completed crawl after a provenance-verified PR analysis.</p>
+            </div>
+
+            <div class="section-box">
+              <div class="section-title">
+                <i data-lucide="bot" class="icon-sm text-cyan"></i>
+                <span>Agent Execution Trace</span>
+              </div>
+              <table class="styled-table" id="tableQAAgentTrace">
+                <thead><tr><th>Agent</th><th>Status</th><th>Evidence Output</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <div class="section-box">
+              <div class="section-title">
+                <i data-lucide="badge-check" class="icon-sm text-emerald"></i>
+                <span>Evidence Verification</span>
+              </div>
+              <table class="styled-table" id="tableQAVerification">
+                <thead><tr><th>Claim</th><th>Status</th><th>Confidence</th><th>Reason</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <div class="section-box">
+              <div class="section-title">
+                <i data-lucide="list-checks" class="icon-sm text-amber"></i>
+                <span>Reviewer-Ready Test Cases</span>
+              </div>
+              <table class="styled-table" id="tableQATests">
+                <thead><tr><th>ID</th><th>Test</th><th>Priority</th><th>Review Status</th><th>Evidence</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+
+            <div class="section-box">
+              <div class="section-title">
+                <i data-lucide="circle-help" class="icon-sm text-rose"></i>
+                <span>What We Do Not Know</span>
+              </div>
+              <ul id="qaUnknowns" class="evidence-list"></ul>
             </div>
           </div>
         </div>

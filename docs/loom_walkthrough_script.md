@@ -28,11 +28,13 @@ Open the generated report and select one impacted requirement. Follow its actual
 
 If there are no impact paths, say so. This is an admissible result; it means the captured evidence did not prove a link.
 
-## 4:45–5:30 — ambiguity and absence
+## 4:45–5:35 — ambiguity, absence, and QA verification
 
 Show the coverage matrix. `COVERED` means at least two observed matching elements; `PARTIAL` means one. `UNVERIFIED` means the bounded crawl did not find proof. The current system does not emit `ABSENT`: that status requires a future exhaustive-coverage certificate. Point out any unmapped changed files and the corresponding human-review recommendation.
 
-## 5:30–6:20 — validation
+Open **QA Intelligence**, select the same completed crawl, and run the verification. Show one path being checked against its stored DOM, screenshot, and browser-observed transition. If a claim is low-confidence or any artifact is missing, point out the explicit `NEEDS_REVIEW` or `REJECTED` status. Do not present it as a passed test.
+
+## 5:35–6:20 — validation
 
 Run:
 

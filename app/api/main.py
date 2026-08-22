@@ -14,6 +14,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets
@@ -27,6 +28,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
+from app.agents import get_agent, list_agents
 from app.code_analyzer import CodeAnalyzer
 from app.config import get_settings
 from app.crawler.security import validate_crawl_url
@@ -34,8 +36,9 @@ from app.crawler.session_manager import CrawlConfiguration, CrawlSessionManager
 from app.graph import GraphBuilder, GraphUnavailableError
 from app.ingestor import RequirementIngestor
 from app.llm import MockLLMProvider, get_llm_provider
-from app.models import UserFlow
+from app.models import BlastRadiusReport, UserFlow
 from app.pr_analyzer import PRAnalyzer
+from app.qa_intelligence import QAIntelligenceEngine
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +175,22 @@ async def health() -> dict[str, str]:
         "target_repo": settings.target_repo,
         "target_pr": str(settings.target_pr),
     }
+
+
+@app.get("/api/agents", dependencies=[Depends(require_api_auth)])
+async def get_agents() -> dict[str, Any]:
+    """Return the bounded agent contracts used by this evidence pipeline."""
+    agents = list_agents()
+    return {"agents": [agent.model_dump(mode="json") for agent in agents], "count": len(agents)}
+
+
+@app.get("/api/agents/{agent_name}", dependencies=[Depends(require_api_auth)])
+async def get_agent_contract(agent_name: str) -> dict[str, Any]:
+    """Return one agent's authority and its human-escalation boundary."""
+    agent = get_agent(agent_name)
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+    return agent.model_dump(mode="json")
 
 
 @app.post("/api/ingest", dependencies=[Depends(require_api_auth)])
@@ -571,8 +590,6 @@ async def analyze_pr(
 @app.get("/api/report/{pr_number}", dependencies=[Depends(require_api_auth)])
 async def get_report(pr_number: int, repo: str | None = None, format: str = "json", force: bool = False) -> Any:
     """Fetch or dynamically compute a blast-radius report for any PR."""
-    import json
-
     if pr_number > 500000:
         raise HTTPException(status_code=404, detail=f"PR #{pr_number} not found")
 
@@ -600,6 +617,52 @@ async def get_report(pr_number: int, repo: str | None = None, format: str = "jso
         return report
 
     raise HTTPException(status_code=404, detail=f"Report for PR #{pr_number} on {target_repo} not found")
+
+
+@app.get("/api/qa-analysis/{pr_number}", dependencies=[Depends(require_api_auth)])
+async def get_qa_analysis(pr_number: int, crawl_id: str, repo: str | None = None) -> dict[str, Any]:
+    """Create a reviewer-ready QA plan from one stored report and crawl session.
+
+    This endpoint never re-runs the crawler, graph, or LLM. It fails closed if
+    either prerequisite is missing, unverifiable, or selected from a non-final
+    crawl, so an API consumer cannot receive plausible but unsupported tests.
+    """
+    if not 1 <= pr_number <= 500_000:
+        raise HTTPException(status_code=404, detail=f"PR #{pr_number} not found")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,120}", crawl_id):
+        raise HTTPException(status_code=400, detail="Invalid crawl_id")
+    if repo is not None and not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+        raise HTTPException(status_code=400, detail="Repository must use the owner/repository format.")
+
+    settings = get_settings()
+    report_path = settings.data_dir / f"blast_radius_pr_{pr_number}.json"
+    if not report_path.is_file():
+        raise HTTPException(
+            status_code=409,
+            detail="Run a provenance-verified blast-radius analysis before generating a QA plan.",
+        )
+    try:
+        report_data = json.loads(report_path.read_text(encoding="utf-8"))
+        if report_data.get("metrics", {}).get("evidence_mode") != "neo4j_graph_traversal":
+            raise ValueError("report is not provenance-verified")
+        report = BlastRadiusReport.model_validate(report_data)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=409, detail=f"Stored report cannot be verified: {exc}") from exc
+
+    # A fresh manager reads immutable session metadata from the configured
+    # evidence directory instead of relying on an in-memory singleton.
+    session = CrawlSessionManager(settings.data_dir).get_session(crawl_id)
+    if session is None or session.status != "COMPLETED":
+        raise HTTPException(status_code=409, detail="Select a completed crawl session with persisted artifacts.")
+    if not session.pages or not session.elements:
+        raise HTTPException(status_code=409, detail="The selected crawl has no captured pages or UI elements.")
+
+    analysis = QAIntelligenceEngine(settings.data_dir).analyze(
+        report=report,
+        session=session,
+        repository=repo or settings.target_repo,
+    )
+    return analysis.model_dump(mode="json")
 
 
 @app.get("/api/graph/nodes", dependencies=[Depends(require_api_auth)])

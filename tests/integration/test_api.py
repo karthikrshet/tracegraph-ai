@@ -55,6 +55,101 @@ def test_health_endpoint(client):
     assert "target_pr" in data
 
 
+def test_agent_contracts_are_exposed_without_claiming_runtime_success(client):
+    """Agent metadata documents authority; it is not a fabricated execution result."""
+    response = client.get("/api/agents")
+
+    assert response.status_code == 200
+    agents = response.json()["agents"]
+    verifier = next(agent for agent in agents if agent["name"] == "evidence_verifier")
+    assert verifier["requires_evidence"] is True
+    assert "no" in verifier["failure_behavior"].lower()
+
+
+def test_qa_analysis_refuses_to_generate_without_a_verified_report(client, monkeypatch, tmp_path):
+    """No report means no tests, rather than a fallback checklist."""
+    import app.api.main as main_mod
+    from app.config import Settings
+
+    monkeypatch.setattr(main_mod, "get_settings", lambda: Settings(data_dir=tmp_path))
+    response = client.get("/api/qa-analysis/7?crawl_id=evidence-run-1")
+
+    assert response.status_code == 409
+    assert "provenance-verified" in response.json()["detail"]
+
+
+def test_qa_analysis_verifies_a_persisted_report_and_crawl(client, monkeypatch, tmp_path):
+    """The public endpoint reads the persisted evidence pair and does not call an LLM."""
+    import app.api.main as main_mod
+    from app.config import Settings
+    from app.crawler.session_manager import CrawlConfiguration, CrawlSession
+    from app.models import BlastRadiusReport, ConfidenceTier, ImpactedItem, Page, UIElement
+
+    settings = Settings(data_dir=tmp_path)
+    crawl_id = "evidence-run-7"
+    crawl_root = tmp_path / "artifacts" / "crawls" / crawl_id
+    (crawl_root / "screenshots").mkdir(parents=True)
+    (crawl_root / "dom").mkdir(parents=True)
+    (crawl_root / "screenshots" / "home.png").write_bytes(b"browser-shot")
+    (crawl_root / "dom" / "home.html").write_text("<main>Observed</main>", encoding="utf-8")
+    session = CrawlSession(
+        id=crawl_id,
+        start_url="https://example.test/",
+        status="COMPLETED",
+        pages_discovered=1,
+        elements_discovered=1,
+        configuration=CrawlConfiguration(crawl_id=crawl_id, start_url="https://example.test/"),
+        pages=[
+            Page(
+                id="home",
+                url="https://example.test/",
+                title="Home",
+                screenshot_path=f"artifacts/crawls/{crawl_id}/screenshots/home.png",
+                dom_path=f"artifacts/crawls/{crawl_id}/dom/home.html",
+            )
+        ],
+        elements=[UIElement(id="ui-home", page_id="home", selector="a.home", label="Home", element_type="link")],
+    )
+    (crawl_root / "session.json").write_text(session.model_dump_json(), encoding="utf-8")
+    report = BlastRadiusReport(
+        pr_number=7,
+        pr_title="Evidence PR",
+        pr_url="https://github.com/example/repo/pull/7",
+        overall_risk="LOW",
+        changed_files=["src/home.ts"],
+        impacted_ui_elements=[
+            ImpactedItem(
+                item_type="UIElement",
+                item_id="ui-home",
+                label="Home",
+                risk_level="LOW",
+                confidence=0.9,
+                confidence_tier=ConfidenceTier.HIGH,
+                evidence_chain=["PR-7", "home.ts", "Home", "ui-home"],
+                raw_path=[
+                    {"type": "PullRequest", "id": "PR-7"},
+                    {"type": "CodeFile", "id": "src/home.ts"},
+                    {"type": "CodeSymbol", "id": "Home"},
+                    {"type": "UIElement", "id": "ui-home"},
+                ],
+            )
+        ],
+        impacted_flows=[],
+        impacted_requirements=[],
+        absent_requirements=[],
+        metrics={"evidence_mode": "neo4j_graph_traversal"},
+    )
+    (tmp_path / "blast_radius_pr_7.json").write_text(report.model_dump_json(), encoding="utf-8")
+    monkeypatch.setattr(main_mod, "get_settings", lambda: settings)
+
+    response = client.get(f"/api/qa-analysis/7?crawl_id={crawl_id}&repo=example/repo")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["verification"][0]["status"] == "VERIFIED"
+    assert data["generated_tests"] == []  # No observed transition, so no test is invented.
+
+
 def test_custom_public_host_is_validated_and_scoped_per_request(client, monkeypatch):
     """A custom target is allowed only after the normal validation gate passes."""
     import app.api.main as main_mod
