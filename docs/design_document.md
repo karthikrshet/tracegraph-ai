@@ -56,6 +56,17 @@ And the system's response is not an LLM opinion — it's a graph path.
 
 ## 3. Agent Decomposition
 
+### Assignment review map
+
+| Assignment requirement | Where it is addressed |
+|---|---|
+| 5. Agent decomposition and deterministic/LLM boundary | Sections 3, 3.1, and 3.2 |
+| 6. Graph schema, query justification, and absence | Sections 4.1–4.4 and ADR-002 |
+| 7. Confidence, ambiguity, and human escalation | Section 5 and ADR-003 |
+| 8. Evaluation and repeated-run correctness | Section 6, especially 6.4 |
+| 9. Honest scope decisions | Section 7 |
+| 10. Highest-value next-week work | Section 8 |
+
 The system is NOT an unconstrained prompt-chain or reckless open-ended web agent. It is a **bounded autonomous agent architecture** with explicit deterministic/LLM boundaries:
 
 ```
@@ -99,7 +110,7 @@ Every single impact claim is an auditable, reproducible graph path.
 |-------|------|-----|-----|
 | Application Crawl & Observation | ✅ | | Playwright browser execution & DOM snapshots |
 | SSRF & URL Security Validation | ✅ | | Strict DNS resolution, loopback/private/metadata IP blocking |
-| Next-Action Exploration Policy | ✅ | 🔶 | Priority heuristics + candidate action selection |
+| Next-Action Exploration Policy | ✅ | | Deterministic priority heuristics; no LLM chooses browser actions |
 | Safety & Policy Validator | ✅ | | Destructive verb filtering (`delete`, `buy now`, `logout`) |
 | Real-time Event Streaming (SSE) | ✅ | | Server-Sent Events stream for live execution observability |
 | Transition & State Fingerprinting | ✅ | | Deterministic hash of URL, DOM elements, and title |
@@ -287,8 +298,8 @@ End-to-end confidence is the **product of individual hop weights**:
 | File → Symbol | 0.95 | AST near-deterministic |
 | Symbol → UIElement | 0.85 | Name heuristic (best case) |
 | UIElement → Page | 1.00 | Crawl artifact fact |
-| Page → UserFlow | 1.00 | Defined by us |
-| Flow → Requirement | 0.90 | Explicitly mapped |
+| Page → UserFlow | 1.00 | Crawl-session membership fact |
+| Flow → Requirement | 0.90 | Observed UI coverage link |
 
 Full path (PR → Requirement): `1.00 × 0.95 × 0.85 × 1.00 × 1.00 × 0.90 = 0.727`
 
@@ -306,11 +317,15 @@ This is the **baseline confidence**. Name-match quality can boost Symbol→UI to
 
 ### 5.4 Human Escalation
 
-The system recommends human review when:
-- Any requirement with coverage_status = UNVERIFIED is in the blast radius
-- Overall path confidence < 0.5
-- The PR changes a file with 0 IMPLEMENTED_BY relationships
-- More than 3 requirements are marked ABSENT
+The system stops automated approval and requests human review when:
+- a changed file has no verified `IMPLEMENTED_BY` route to browser-observed UI;
+- an impacted requirement is `UNVERIFIED` or a path confidence is below 0.50;
+- a candidate test lacks a persisted DOM, screenshot, or observed transition; or
+- an operator wants to label a requirement `ABSENT` without an exhaustive-coverage certificate.
+
+The first three cases appear in the report as explicit gaps or
+`NEEDS_REVIEW`; the last is blocked rather than inferred. Human review adds a
+new decision record—it does not silently upgrade the graph's evidence.
 
 ---
 
@@ -342,6 +357,25 @@ PR #350 sample is evidence-backed but is not a held-out benchmark.
 ### 6.3 Reproducibility
 
 Given a pinned PR head SHA, persisted crawl artifacts, persisted extracted requirements, and a Neo4j snapshot, symbol extraction, graph traversal, and confidence arithmetic are deterministic. A fresh live crawl or fresh LLM extraction is a new run and must be evaluated as such; the system does not claim identical outcomes across those runs.
+
+### 6.4 100-run repeatability protocol
+
+The evaluation separates **evidence replay** from **new collection**. For the
+same immutable evidence manifest (same PR SHA, requirement records, DOM,
+screenshots, pages, UI elements, and transitions), run the graph build and
+impact analysis 100 times. The acceptance oracle is exact equality of:
+
+1. node and edge counts;
+2. sorted raw evidence paths and confidence values;
+3. changed-file, impacted-UI, flow, requirement, and gap sets; and
+4. deterministic QA verdicts and generated test IDs.
+
+Any difference is a reproducibility defect. The optional LLM narrative is
+excluded from that oracle: it is generated only after facts are fixed and is
+checked for factual fidelity by requiring every named file, control, flow, and
+requirement to exist in the deterministic report. A fresh crawl or fresh LLM
+requirement extraction is deliberately a **new experiment**, evaluated against
+reviewed labels rather than compared bit-for-bit with an earlier run.
 
 ---
 
@@ -405,7 +439,9 @@ actions.
 
 **Context:** "Not found" and "proven absent" are epistemically different. The assignment specifically asks about modeling absence.
 
-**Consequences:** UNVERIFIED requirements in the blast radius trigger a human-review flag. ABSENT requirements are explained (why the crawl couldn't find them).
+**Consequences:** UNVERIFIED requirements in the blast radius trigger a
+human-review flag. `ABSENT` is reserved for a future exhaustive-coverage
+certificate and is not emitted by the bounded crawler.
 
 ### ADR-003: Hop-weight product for confidence
 
@@ -417,7 +453,10 @@ actions.
 
 ### ADR-004: Fail closed on missing evidence
 
-**Decision:** If Playwright, GitHub, document retrieval, or Neo4j fails, stop the run and emit no blast-radius report.
+**Decision:** If Playwright, document retrieval, or Neo4j fails, stop the run
+and emit no blast-radius report. If GitHub is temporarily unavailable, reuse
+only a previously retrieved immutable record for the exact repository and PR;
+otherwise stop the run.
 
 **Context:** A polished but fabricated answer is more dangerous than a failed prototype for QA planning.
 
